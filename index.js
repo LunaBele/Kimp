@@ -4,6 +4,10 @@ const fs = require("fs");
 const crypto = require("crypto");
 const FormData = require("form-data");
 const path = require("path");
+const express = require("express");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 const CONFIG = {
   APP_ID: process.env.APP_ID,
@@ -98,8 +102,14 @@ function cleanStockForHashing(stock) {
 
 function updateEnvToken(newToken) {
   const envPath = path.resolve(".env");
-  let envContent = fs.readFileSync(envPath, "utf8");
 
+  if (!fs.existsSync(envPath)) {
+    console.warn("⚠️ Skipping .env update — not supported in Render.");
+    console.log(`📌 Long-lived token:\n${newToken}\n\nPaste it manually into your Render Dashboard.`);
+    return;
+  }
+
+  let envContent = fs.readFileSync(envPath, "utf8");
   envContent = envContent
     .replace(/^PAGE_ACCESS_TOKEN=.*$/m, "PAGE_ACCESS_TOKEN=//exchange for only")
     .replace(/^LONG_PAGE_ACCESS_TOKEN=.*$/m, `LONG_PAGE_ACCESS_TOKEN=${newToken}`);
@@ -229,7 +239,11 @@ async function checkAndPost() {
   }
 }
 
+let isRunning = false;
+
 function startAutoPoster() {
+  if (isRunning) return;
+  isRunning = true;
   console.log(`🚀 Auto-poster started at ${formatPHTime()}.`);
   async function runCheck() {
     const nextInterval = await checkAndPost();
@@ -238,4 +252,12 @@ function startAutoPoster() {
   runCheck();
 }
 
-startAutoPoster();
+// Start Express server
+app.get("/", (req, res) => {
+  res.send(`🚀 Grow-a-Garden Auto Poster is running. Updated: ${formatPHTime()}`);
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Server is listening on port ${PORT}`);
+  startAutoPoster(); // Start auto-poster after server starts
+});
