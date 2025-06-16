@@ -18,11 +18,7 @@ const CONFIG = {
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
   DEFAULT_CHECK_INTERVAL_MS: 30 * 1000,
   STOCK_URL: "https://gagstock.gleeze.com/grow-a-garden",
-  WEATHER_URL: "https://growagardenstock.com/api/stock/weather",
-  HASH_FILES: {
-    STOCK: "last_stock_hash.txt",
-    WEATHER: "last_weather_hash.txt",
-  },
+  HASH_FILE: "last_stock_hash.txt",
 };
 
 if (!CONFIG.APP_ID || !CONFIG.APP_SECRET || !CONFIG.PAGE_ID) {
@@ -118,9 +114,6 @@ function updateEnvToken(newToken) {
   console.log("✅ .env updated with long-lived token.");
 }
 
-/**
- * Exchange short-lived token for long-lived token.
- */
 async function getOrExchangeLongLivedToken() {
   if (CONFIG.LONG_PAGE_ACCESS_TOKEN) {
     return CONFIG.LONG_PAGE_ACCESS_TOKEN;
@@ -177,13 +170,8 @@ async function checkAndPost() {
   let nextCheckInterval = CONFIG.DEFAULT_CHECK_INTERVAL_MS;
 
   try {
-    const [stockRes, weatherRes] = await Promise.all([
-      axios.get(CONFIG.STOCK_URL),
-      axios.get(CONFIG.WEATHER_URL),
-    ]);
-
+    const stockRes = await axios.get(CONFIG.STOCK_URL);
     const stock = stockRes.data.data || stockRes.data;
-    const weather = weatherRes.data;
 
     const countdowns = [
       parseCountdown(stock.egg?.countdown),
@@ -197,40 +185,24 @@ async function checkAndPost() {
     nextCheckInterval = Math.min(...countdowns) + 1000;
 
     const stockHash = hashData(cleanStockForHashing(stock));
-    const weatherHash = hashData(weather);
-    const prevStockHash = loadHash(CONFIG.HASH_FILES.STOCK);
-    const prevWeatherHash = loadHash(CONFIG.HASH_FILES.WEATHER);
+    const prevStockHash = loadHash(CONFIG.HASH_FILE);
 
-    const stockChanged = stockHash !== prevStockHash;
-    const weatherChanged = weatherHash !== prevWeatherHash;
-
-    if (!stockChanged && !weatherChanged) {
+    if (stockHash === prevStockHash) {
       console.log(`ℹ️ No changes detected as of ${formatPHTime()}.`);
       return nextCheckInterval;
     }
 
-    if (stockChanged) {
-      const message =
-        `🌱 Grow-a-Garden Stock Update\n` +
-        summarizeSection("Gear", "🛠️", stock.gear) +
-        summarizeSection("Seeds", "🌱", stock.seed) +
-        summarizeSection("Eggs", "🥚", stock.egg) +
-        summarizeSection("Cosmetics", "🎨", stock.cosmetics) +
-        summarizeSection("Honey", "🍯", stock.honey) +
-        `\n\n📅 Updated: ${formatPHTime()}`;
-      await postToFacebook(message);
-      saveHash(CONFIG.HASH_FILES.STOCK, stockHash);
-    }
+    const message =
+      `🌱 Grow-a-Garden Stock Update\n` +
+      summarizeSection("Gear", "🛠️", stock.gear) +
+      summarizeSection("Seeds", "🌱", stock.seed) +
+      summarizeSection("Eggs", "🥚", stock.egg) +
+      summarizeSection("Cosmetics", "🎨", stock.cosmetics) +
+      summarizeSection("Honey", "🍯", stock.honey) +
+      `\n\n📅 Updated: ${formatPHTime()}`;
 
-    if (weatherChanged && !stockChanged) {
-      const message =
-        `☀️ Grow-a-Garden Weather Update\n` +
-        `${weather.icon} Current Weather: ${weather.currentWeather}\n` +
-        `🌾 Crop Bonuses: ${weather.cropBonuses}\n` +
-        `📅 Updated: ${formatPHTime()}`;
-      await postToFacebook(message);
-      saveHash(CONFIG.HASH_FILES.WEATHER, weatherHash);
-    }
+    await postToFacebook(message);
+    saveHash(CONFIG.HASH_FILE, stockHash);
 
     return nextCheckInterval;
   } catch (err) {
@@ -252,12 +224,11 @@ function startAutoPoster() {
   runCheck();
 }
 
-// Start Express server
 app.get("/", (req, res) => {
   res.send(`🚀 Grow-a-Garden Auto Poster is running. Updated: ${formatPHTime()}`);
 });
 
 app.listen(PORT, () => {
   console.log(`🌐 Server is listening on port ${PORT}`);
-  startAutoPoster(); // Start auto-poster after server starts
+  startAutoPoster();
 });
