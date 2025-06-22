@@ -1,5 +1,4 @@
 {
-  // 🥚 Eggs
   "Common Egg": "🥚",
   "Uncommon Egg": "🐣",
   "Rare Egg": "🍳",
@@ -12,7 +11,6 @@
   "Bee Egg": "🐝🥚",
   "Anti Bee Egg": "🚫🐝🥚",
 
-  // 🧰 Gear
   "Watering Can": "🚿",
   "Trowel": "🛠️",
   "Recall Wrench": "🔧",
@@ -32,7 +30,6 @@
   "Pollen Radar": "📡🐝",
   "Friendship Pot": "🌸🏺",
 
-  // 🔧 Crafted Sprinklers
   "Spice Spritzer Sprinkler": "🌶️💦",
   "Sweet Soaker Sprinkler": "🍉💦",
   "Stalk Sprout Sprinkler": "🌱💦",
@@ -40,7 +37,6 @@
   "Berry Blusher Sprinkler": "🍓💦",
   "Flower Froster Sprinkler": "❄️💦",
 
-  // 🌿 Crops & Fruits
   "Carrot": "🥕",
   "Wild Carrot": "🥕🌿",
   "Strawberry": "🍓",
@@ -72,7 +68,6 @@
   "Cacao": "🍫",
   "Cauliflower": "🥦",
 
-  // 🌸 Flowers
   "Ember Lily": "🏵️",
   "Daffodil": "🌼",
   "Orange Tulip": "🌷",
@@ -80,7 +75,6 @@
   "Parasol Flower": "☂️🌸",
   "Elephant Ears": "🪻",
 
-  // 📦 Packs & Crates
   "Flower Seed Pack": "🌸",
   "Summer Seed Pack": "🌻",
   "Crafters Seed Pack": "🎁",
@@ -88,12 +82,10 @@
   "Bee Crate": "📦",
   "Honey Comb": "🍯",
 
-  // 🧴 Mutation Sprays
   "Mutation Spray Choc": "🟤🧴",
   "Mutation Spray Pollinated": "🟣🧴",
   "Mutation Spray Shocked": "🔌🧴",
 
-  // 🏝️ Summer Cosmetics
   "Tiki Bar": "🏖️",
   "Lemonade Stand": "🍋",
   "Market Cart": "🛒",
@@ -103,7 +95,6 @@
   "Cooler Chest (red)": "🧊",
   "Cooler Chest (pink)": "🧊",
 
-  // 🪴 Old Cosmetics (Core)
   "Red Tractor": "🚜",
   "Green Tractor": "🚜",
   "Frog Fountain": "🐸⛲",
@@ -140,7 +131,6 @@
   "Flag (Gold)": "🚩",
   "Wind Chimes": "🎐",
 
-  // 🐾 Summer Pets
   "Sea Turtle": "🐢",
   "Flamingo": "🦩",
   "Toucan": "🦜",
@@ -149,4 +139,4 @@
   "Mimic Octopus": "🐙",
   "Macaw": "🦜",
   "Crab": "🦀"
-};
+}
