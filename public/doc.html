@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Online - Enhanced Number Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(45deg, #0a0a0a, #1a1a2e, #16213e);
+            background-size: 400% 400%;
+            animation: gradientShift 8s ease infinite;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .screen {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        .container {
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        .bot-status {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #00ff88;
+            border-radius: 20px;
+            padding: 40px 60px;
+            box-shadow: 
+                0 0 30px rgba(0, 255, 136, 0.5),
+                inset 0 0 30px rgba(0, 255, 136, 0.1);
+            animation: borderPulse 2s ease-in-out infinite;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .bot-status:hover {
+            transform: scale(1.05);
+        }
+
+        @keyframes borderPulse {
+            0%, 100% { 
+                border-color: #00ff88;
+                box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+            }
+            25% { 
+                border-color: #ff0088;
+                box-shadow: 0 0 30px rgba(255, 0, 136, 0.5);
+            }
+            50% { 
+                border-color: #0088ff;
+                box-shadow: 0 0 30px rgba(0, 136, 255, 0.5);
+            }
+            75% { 
+                border-color: #ff8800;
+                box-shadow: 0 0 30px rgba(255, 136, 0, 0.5);
+            }
+        }
+
+        .bot-status::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8, #ff0000);
+            border-radius: 20px;
+            z-index: -1;
+            animation: rainbow 3s linear infinite;
+            background-size: 400%;
+        }
+
+        @keyframes rainbow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 400% 50%; }
+        }
+
+        .status-indicator {
+            width: 20px;
+            height: 20px;
+            background: #00ff88;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 15px;
+            animation: pulse 1.5s ease-in-out infinite;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.8);
+            position: relative;
+        }
+
+        @keyframes pulse {
+            0%, 100% { 
+                transform: scale(1);
+                background: #00ff88;
+            }
+            50% { 
+                transform: scale(1.3);
+                background: #88ff00;
+            }
+        }
+
+        .status-indicator::after {
+            content: '';
+            position: absolute;
+            top: -5px;
+            left: -5px;
+            right: -5px;
+            bottom: -5px;
+            border: 2px solid rgba(0, 255, 136, 0.3);
+            border-radius: 50%;
+            animation: ripple 2s ease-out infinite;
+        }
+
+        @keyframes ripple {
+            0% {
+                transform: scale(0.8);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+
+        .bot-text {
+            font-size: 3rem;
+            font-weight: bold;
+            background: linear-gradient(45deg, #00ff88, #0088ff, #ff0088, #ff8800);
+            background-size: 400% 400%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: textGradient 3s ease infinite;
+            text-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+            margin: 20px 0;
+            letter-spacing: 3px;
+        }
+
+        @keyframes textGradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .online-text {
+            font-size: 1.5rem;
+            color: #00ff88;
+            margin-top: 10px;
+            animation: glow 2s ease-in-out infinite alternate;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        @keyframes glow {
+            from {
+                text-shadow: 0 0 10px #00ff88, 0 0 20px #00ff88, 0 0 30px #00ff88;
+            }
+            to {
+                text-shadow: 0 0 20px #00ff88, 0 0 30px #00ff88, 0 0 40px #00ff88;
+            }
+        }
+
+        .click-hint {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 15px;
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 0.7; }
+            25%, 75% { opacity: 1; }
+        }
+
+        /* Game Setup Screen */
+        .game-setup {
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff88;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            backdrop-filter: blur(10px);
+        }
+
+        .setup-title {
+            font-size: 2rem;
+            color: #00ff88;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .setup-section {
+            margin-bottom: 25px;
+        }
+
+        .setup-label {
+            color: #ffffff;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .difficulty-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .difficulty-btn {
+            padding: 10px 20px;
+            border: 2px solid #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+            color: #00ff88;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .difficulty-btn:hover {
+            background: rgba(0, 255, 136, 0.3);
+            transform: scale(1.05);
+        }
+
+        .difficulty-btn.selected {
+            background: #00ff88;
+            color: #000000;
+        }
+
+        .color-picker-container {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .color-option {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .color-option:hover {
+            transform: scale(1.2);
+        }
+
+        .color-option.selected {
+            border-color: #ffffff;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+
+        .start-game-btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.2rem;
+            background: linear-gradient(45deg, #00ff88, #0088ff);
+            border: none;
+            border-radius: 10px;
+            color: #000000;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .start-game-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+        }
+
+        /* Game Board */
+        .game-container {
+            max-width: 800px;
+            width: 95%;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff88;
+            border-radius: 20px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .player-piece {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+        }
+
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 2px;
+            background: #333;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .board-cell {
+            aspect-ratio: 1;
+            background: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #000;
+            position: relative;
+            border-radius: 5px;
+            font-size: 0.8rem;
+        }
+
+        .board-cell.penalty {
+            background: linear-gradient(45deg, #ff4444, #cc0000);
+            color: #ffffff;
+        }
+
+        .board-cell.bonus {
+            background: linear-gradient(45deg, #44ff44, #00cc00);
+            color: #000000;
+        }
+
+        .board-cell.finish {
+            background: linear-gradient(45deg, #ffd700, #ffaa00);
+            color: #000000;
+            font-weight: bold;
+        }
+
+        .player-on-cell {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            z-index: 100;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        .player-on-cell.walking {
+            animation: walk 0.5s ease-in-out;
+        }
+
+        @keyframes walk {
+            0%, 100% { transform: scale(1) translateY(0); }
+            25% { transform: scale(1.1) translateY(-3px); }
+            50% { transform: scale(1.2) translateY(-5px); }
+            75% { transform: scale(1.1) translateY(-3px); }
+        }
+
+        .player-on-cell.bonus-move {
+            animation: bonusMove 1s ease-in-out;
+        }
+
+        @keyframes bonusMove {
+            0% { transform: scale(1) translateY(0) rotate(0deg); }
+            25% { transform: scale(1.3) translateY(-10px) rotate(90deg); }
+            50% { transform: scale(1.5) translateY(-15px) rotate(180deg); }
+            75% { transform: scale(1.3) translateY(-10px) rotate(270deg); }
+            100% { transform: scale(1) translateY(0) rotate(360deg); }
+        }
+
+        .player-on-cell.penalty-move {
+            animation: penaltyMove 1s ease-in-out;
+        }
+
+        @keyframes penaltyMove {
+            0% { transform: scale(1) translateY(0) rotate(0deg); }
+            25% { transform: scale(0.7) translateY(10px) rotate(-45deg); }
+            50% { transform: scale(0.5) translateY(15px) rotate(-90deg); }
+            75% { transform: scale(0.7) translateY(10px) rotate(-135deg); }
+            100% { transform: scale(1) translateY(0) rotate(-180deg); }
+        }
+
+        /* Bonus/Penalty Popup */
+        .bonus-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            border: 3px solid;
+            border-radius: 20px;
+            padding: 30px 40px;
+            text-align: center;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            animation: popupAppear 0.5s ease-out;
+        }
+
+        @keyframes popupAppear {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        .bonus-popup.bonus {
+            border-color: #44ff44;
+            box-shadow: 0 0 30px rgba(68, 255, 68, 0.5);
+        }
+
+        .bonus-popup.penalty {
+            border-color: #ff4444;
+            box-shadow: 0 0 30px rgba(255, 68, 68, 0.5);
+        }
+
+        .popup-title {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .popup-title.bonus {
+            color: #44ff44;
+        }
+
+        .popup-title.penalty {
+            color: #ff4444;
+        }
+
+        .popup-message {
+            font-size: 1.3rem;
+            color: #ffffff;
+            margin-bottom: 10px;
+        }
+
+        .popup-value {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+
+        .popup-value.bonus {
+            color: #44ff44;
+        }
+
+        .popup-value.penalty {
+            color: #ff4444;
+        }
+
+        .game-controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .dice {
+            width: 60px;
+            height: 60px;
+            background: #ffffff;
+            border: 2px solid #000;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #000;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .dice:hover {
+            transform: scale(1.1);
+        }
+
+        .dice.rolling {
+            animation: diceRoll 1s ease-in-out;
+        }
+
+        @keyframes diceRoll {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(90deg); }
+            50% { transform: rotate(180deg); }
+            75% { transform: rotate(270deg); }
+        }
+
+        .roll-btn {
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            background: linear-gradient(45deg, #00ff88, #0088ff);
+            border: none;
+            border-radius: 10px;
+            color: #000000;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .roll-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .roll-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .game-status {
+            text-align: center;
+            color: #00ff88;
+            font-size: 1.2rem;
+            margin: 15px 0;
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 10px 15px;
+            background: rgba(255, 0, 136, 0.2);
+            border: 1px solid #ff0088;
+            color: #ff0088;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 0, 136, 0.4);
+            transform: scale(1.05);
+        }
+
+        /* Win/Loss Animations */
+        .win-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .firework {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            animation: firework 2s ease-out forwards;
+        }
+
+        @keyframes firework {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(20);
+                opacity: 0;
+            }
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            animation: confetti 3s ease-out forwards;
+        }
+
+        @keyframes confetti {
+            0% {
+                transform: translateY(-100vh) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+
+        .screen-shake {
+            animation: shake 0.5s ease-in-out 3;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.8);
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px) rotate(0deg);
+                opacity: 1;
+            }
+            50% {
+                transform: translateY(-100px) rotate(180deg);
+                opacity: 0.5;
+            }
+        }
+
+        .credit {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+
+        .sound-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+            padding: 10px 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+
+        .sound-btn:hover {
+            background: rgba(0, 255, 136, 0.4);
+            transform: scale(1.05);
+        }
+
+        .loading-bar {
+            width: 300px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            margin: 20px auto;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #0088ff, #ff0088);
+            border-radius: 2px;
+            animation: loading 3s ease-in-out infinite;
+        }
+
+        @keyframes loading {
+            0% { width: 0%; }
+            50% { width: 100%; }
+            100% { width: 0%; }
+        }
+
+        /* Game Over Screen */
+        .game-over {
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff88;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .game-over-title {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #00ff88, #0088ff, #ff0088);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: titlePulse 2s ease-in-out infinite;
+        }
+
+        @keyframes titlePulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .game-over-message {
+            font-size: 1.5rem;
+            color: #ffffff;
+            margin-bottom: 30px;
+        }
+
+        .play-again-btn {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            background: linear-gradient(45deg, #00ff88, #0088ff);
+            border: none;
+            border-radius: 10px;
+            color: #000000;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 0 10px;
+        }
+
+        .play-again-btn:hover {
+            transform: scale(1.05);
+        }
+
+        @media (max-width: 768px) {
+            .bot-text {
+                font-size: 2rem;
+            }
+            .bot-status {
+                padding: 30px 40px;
+            }
+            .game-board {
+                font-size: 0.6rem;
+            }
+            .difficulty-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="particles" id="particles"></div>
+    
+    <!-- Main Bot Screen -->
+    <div class="screen active" id="mainScreen">
+        <div class="container">
+            <div class="bot-status" onclick="showGameSetup()">
+                <div>
+                    <span class="status-indicator"></span>
+                    <span class="bot-text">BOT</span>
+                </div>
+                <div class="online-text">ONLINE</div>
+                <div class="loading-bar">
+                    <div class="loading-progress"></div>
+                </div>
+                <div class="click-hint">Click to play Number Race!</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Setup Screen -->
+    <div class="screen" id="setupScreen">
+        <div class="game-setup">
+            <h2 class="setup-title">🎮 Number Race Setup</h2>
+            
+            <div class="setup-section">
+                <label class="setup-label">Choose AI Difficulty:</label>
+                <div class="difficulty-buttons">
+                    <button class="difficulty-btn" data-difficulty="easy">Easy</button>
+                    <button class="difficulty-btn selected" data-difficulty="medium">Medium</button>
+                    <button class="difficulty-btn" data-difficulty="hard">Hard</button>
+                    <button class="difficulty-btn" data-difficulty="expert">Expert</button>
+                    <button class="difficulty-btn" data-difficulty="impossible">Impossible</button>
+                </div>
+            </div>
+
+            <div class="setup-section">
+                <label class="setup-label">Choose Your Color:</label>
+                <div class="color-picker-container">
+                    <div class="color-option selected" data-color="#ff4444" style="background: #ff4444;"></div>
+                    <div class="color-option" data-color="#4444ff" style="background: #4444ff;"></div>
+                    <div class="color-option" data-color="#44ff44" style="background: #44ff44;"></div>
+                    <div class="color-option" data-color="#ffff44" style="background: #ffff44;"></div>
+                    <div class="color-option" data-color="#ff44ff" style="background: #ff44ff;"></div>
+                    <div class="color-option" data-color="#44ffff" style="background: #44ffff;"></div>
+                    <div class="color-option" data-color="#ff8844" style="background: #ff8844;"></div>
+                    <div class="color-option" data-color="#8844ff" style="background: #8844ff;"></div>
+                </div>
+            </div>
+
+            <button class="start-game-btn" onclick="startGame()">Start Game</button>
+        </div>
+        <button class="back-btn" onclick="showMainScreen()">← Back</button>
+    </div>
+
+    <!-- Game Screen -->
+    <div class="screen" id="gameScreen">
+        <div class="game-container">
+            <div class="game-header">
+                <div class="player-info">
+                    <div class="player-piece" id="playerPiece"></div>
+                    <span>You (Position: <span id="playerPos">1</span>)</span>
+                </div>
+                <div class="player-info">
+                    <div class="player-piece" style="background: #888888;"></div>
+                    <span>AI (Position: <span id="aiPos">1</span>)</span>
+                </div>
+            </div>
+
+            <div class="game-board" id="gameBoard"></div>
+
+            <div class="game-status" id="gameStatus">Your turn! Roll the dice!</div>
+
+            <div class="game-controls">
+                <div class="dice" id="dice">?</div>
+                <button class="roll-btn" id="rollBtn" onclick="rollDice()">Roll Dice</button>
+            </div>
+        </div>
+        <button class="back-btn" onclick="showMainScreen()">← Back</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div class="screen" id="gameOverScreen">
+        <div class="game-over">
+            <h2 class="game-over-title" id="gameOverTitle">Game Over!</h2>
+            <p class="game-over-message" id="gameOverMessage">Congratulations!</p>
+            <button class="play-again-btn" onclick="showGameSetup()">Play Again</button>
+            <button class="play-again-btn" onclick="showMainScreen()">Main Menu</button>
+        </div>
+    </div>
+
+    <button class="sound-btn" onclick="playSound()">🔊 Sound</button>
+    <div class="credit">Created by Mart John</div>
+
+    <script>
+        // Game State
+        let gameState = {
+            playerPos: 1,
+            aiPos: 1,
+            currentPlayer: 'player',
+            difficulty: 'medium',
+            playerColor: '#ff4444',
+            aiColor: '#888888',
+            isGameActive: false,
+            specialCells: {},
+            isMoving: false
+        };
+
+        // Audio Context
+        let audioContext;
+        let isPlaying = false;
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playBeep(frequency, duration, type = 'sine') {
+            initAudio();
+            
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+
+        function playBootupSequence() {
+            if (isPlaying) return;
+            isPlaying = true;
+            
+            setTimeout(() => playBeep(200, 0.1), 0);
+            setTimeout(() => playBeep(300, 0.1), 150);
+            setTimeout(() => playBeep(400, 0.1), 300);
+            setTimeout(() => playBeep(500, 0.2), 450);
+            setTimeout(() => playBeep(600, 0.3, 'square'), 700);
+            
+            setTimeout(() => {
+                isPlaying = false;
+            }, 1200);
+        }
+
+        function playSound() {
+            playBootupSequence();
+        }
+
+        function playDiceSound() {
+            playBeep(800, 0.1);
+            setTimeout(() => playBeep(1000, 0.1), 100);
+        }
+
+        function playWinSound() {
+            // Victory fanfare
+            const notes = [523, 659, 784, 1047]; // C, E, G, C
+            notes.forEach((note, i) => {
+                setTimeout(() => playBeep(note, 0.3), i * 200);
+            });
+        }
+
+        function playLoseSound() {
+            playBeep(400, 0.3);
+            setTimeout(() => playBeep(300, 0.3), 300);
+            setTimeout(() => playBeep(200, 0.5), 600);
+        }
+
+        function playBonusSound() {
+            // Ascending notes for bonus
+            setTimeout(() => playBeep(400, 0.2), 0);
+            setTimeout(() => playBeep(500, 0.2), 200);
+            setTimeout(() => playBeep(600, 0.2), 400);
+            setTimeout(() => playBeep(700, 0.3), 600);
+        }
+
+        function playPenaltySound() {
+            // Descending notes for penalty
+            setTimeout(() => playBeep(600, 0.2), 0);
+            setTimeout(() => playBeep(500, 0.2), 200);
+            setTimeout(() => playBeep(400, 0.2), 400);
+            setTimeout(() => playBeep(300, 0.3), 600);
+        }
+
+        // Generate random bonus/penalty cells
+        function generateSpecialCells() {
+            const specialCells = {};
+            const usedPositions = new Set([1, 100]); // Don't put special cells on start or finish
+            
+            // Generate bonus cells (green - go forward)
+            const numBonus = Math.floor(Math.random() * 6) + 5; // 5-10 bonus cells
+            for (let i = 0; i < numBonus; i++) {
+                let position;
+                do {
+                    position = Math.floor(Math.random() * 98) + 2; // 2-99
+                } while (usedPositions.has(position));
+                
+                const bonusValue = Math.floor(Math.random() * 6) + 1; // +1 to +6
+                specialCells[position] = { type: 'bonus', value: bonusValue };
+                usedPositions.add(position);
+            }
+            
+            // Generate penalty cells (red - go backward)
+            const numPenalty = Math.floor(Math.random() * 6) + 5; // 5-10 penalty cells
+            for (let i = 0; i < numPenalty; i++) {
+                let position;
+                do {
+                    position = Math.floor(Math.random() * 98) + 2; // 2-99
+                } while (usedPositions.has(position));
+                
+                const penaltyValue = Math.floor(Math.random() * 6) + 1; // -1 to -6
+                specialCells[position] = { type: 'penalty', value: penaltyValue };
+                usedPositions.add(position);
+            }
+            
+            return specialCells;
+        }
+
+        // Show bonus/penalty popup
+        function showBonusPopup(type, value, player) {
+            const popup = document.createElement('div');
+            popup.className = `bonus-popup ${type}`;
+            
+            const title = document.createElement('div');
+            title.className = `popup-title ${type}`;
+            title.textContent = type === 'bonus' ? '🎉 BONUS!' : '💥 PENALTY!';
+            
+            const message = document.createElement('div');
+            message.className = 'popup-message';
+            message.textContent = `${player === 'player' ? 'You' : 'AI'} ${type === 'bonus' ? 'move forward' : 'go back'}`;
+            
+            const valueDisplay = document.createElement('div');
+            valueDisplay.className = `popup-value ${type}`;
+            valueDisplay.textContent = type === 'bonus' ? `+${value}` : `-${value}`;
+            
+            popup.appendChild(title);
+            popup.appendChild(message);
+            popup.appendChild(valueDisplay);
+            
+            document.body.appendChild(popup);
+            
+            // Play appropriate sound
+            if (type === 'bonus') {
+                playBonusSound();
+            } else {
+                playPenaltySound();
+            }
+            
+            // Remove popup after 2 seconds
+            setTimeout(() => {
+                popup.remove();
+            }, 2000);
+        }
+
+        // Screen Management
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function showMainScreen() {
+            showScreen('mainScreen');
+        }
+
+        function showGameSetup() {
+            showScreen('setupScreen');
+            playBeep(600, 0.2);
+        }
+
+        function showGameScreen() {
+            showScreen('gameScreen');
+        }
+
+        function createWinAnimation() {
+            const animationContainer = document.createElement('div');
+            animationContainer.className = 'win-animation';
+            document.body.appendChild(animationContainer);
+
+            // Create fireworks
+            for (let i = 0; i < 20; i++) {
+                setTimeout(() => {
+                    const firework = document.createElement('div');
+                    firework.className = 'firework';
+                    firework.style.left = Math.random() * 100 + '%';
+                    firework.style.top = Math.random() * 100 + '%';
+                    firework.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                    animationContainer.appendChild(firework);
+                    
+                    setTimeout(() => firework.remove(), 2000);
+                }, i * 100);
+            }
+
+            // Create confetti
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.background = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                    confetti.style.animationDelay = Math.random() * 2 + 's';
+                    animationContainer.appendChild(confetti);
+                    
+                    setTimeout(() => confetti.remove(), 3000);
+                }, i * 50);
+            }
+
+            setTimeout(() => animationContainer.remove(), 5000);
+        }
+
+        function createLoseAnimation() {
+            document.body.classList.add('screen-shake');
+            setTimeout(() => {
+                document.body.classList.remove('screen-shake');
+            }, 1500);
+        }
+
+        function showGameOver(winner) {
+            const title = document.getElementById('gameOverTitle');
+            const message = document.getElementById('gameOverMessage');
+            
+            if (winner === 'player') {
+                title.textContent = '🎉 You Won!';
+                message.textContent = 'Congratulations! You reached 100 first!';
+                createWinAnimation();
+                playWinSound();
+            } else {
+                title.textContent = '🤖 AI Wins!';
+                message.textContent = 'AI reached 100 first! Better luck next time!';
+                createLoseAnimation();
+                playLoseSound();
+            }
+            
+            setTimeout(() => {
+                showScreen('gameOverScreen');
+            }, 2000);
+        }
+
+        // Setup Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Difficulty selection
+            document.querySelectorAll('.difficulty-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('selected'));
+                    this.classList.add('selected');
+                    gameState.difficulty = this.dataset.difficulty;
+                    playBeep(500, 0.1);
+                });
+            });
+
+            // Color selection
+            document.querySelectorAll('.color-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    document.querySelectorAll('.color-option').forEach(o => o.classList.remove('selected'));
+                    this.classList.add('selected');
+                    gameState.playerColor = this.dataset.color;
+                    playBeep(700, 0.1);
+                });
+            });
+        });
+
+        // Game Logic
+        function startGame() {
+            gameState.playerPos = 1;
+            gameState.aiPos = 1;
+            gameState.currentPlayer = 'player';
+            gameState.isGameActive = true;
+            gameState.isMoving = false;
+            gameState.specialCells = generateSpecialCells();
+            
+            document.getElementById('playerPiece').style.background = gameState.playerColor;
+            
+            createGameBoard();
+            updateGameDisplay();
+            showGameScreen();
+            playBeep(800, 0.3);
+        }
+
+        function createGameBoard() {
+            const board = document.getElementById('gameBoard');
+            board.innerHTML = '';
+            
+            // Create board cells (100 to 1, snake pattern)
+            for (let row = 0; row < 10; row++) {
+                for (let col = 0; col < 10; col++) {
+                    let cellNumber;
+                    if (row % 2 === 0) {
+                        cellNumber = 100 - (row * 10 + col);
+                    } else {
+                        cellNumber = 100 - (row * 10 + (9 - col));
+                    }
+                    
+                    const cell = document.createElement('div');
+                    cell.className = 'board-cell';
+                    cell.textContent = cellNumber;
+                    cell.id = `cell-${cellNumber}`;
+                    
+                    // Mark special cells
+                    if (gameState.specialCells[cellNumber]) {
+                        const special = gameState.specialCells[cellNumber];
+                        if (special.type === 'bonus') {
+                            cell.classList.add('bonus');
+                            cell.textContent += ' ✨';
+                        } else {
+                            cell.classList.add('penalty');
+                            cell.textContent += ' ⚡';
+                        }
+                    }
+                    
+                    // Mark finish line
+                    if (cellNumber === 100) {
+                        cell.classList.add('finish');
+                        cell.textContent += ' 🏁';
+                    }
+                    
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        function updateGameDisplay() {
+            document.getElementById('playerPos').textContent = gameState.playerPos;
+            document.getElementById('aiPos').textContent = gameState.aiPos;
+            
+            // Clear previous player positions
+            document.querySelectorAll('.player-on-cell').forEach(p => p.remove());
+            
+            // Add player pieces to board
+            if (gameState.playerPos <= 100) {
+                const playerCell = document.getElementById(`cell-${gameState.playerPos}`);
+                const playerPiece = document.createElement('div');
+                playerPiece.className = 'player-on-cell';
+                playerPiece.id = 'playerPieceOnBoard';
+                playerPiece.style.background = gameState.playerColor;
+                playerPiece.style.left = '2px';
+                playerPiece.style.top = '2px';
+                playerCell.appendChild(playerPiece);
+            }
+            
+            if (gameState.aiPos <= 100) {
+                const aiCell = document.getElementById(`cell-${gameState.aiPos}`);
+                const aiPiece = document.createElement('div');
+                aiPiece.className = 'player-on-cell';
+                aiPiece.id = 'aiPieceOnBoard';
+                aiPiece.style.background = gameState.aiColor;
+                aiPiece.style.right = '2px';
+                aiPiece.style.top = '2px';
+                aiCell.appendChild(aiPiece);
+            }
+        }
+
+        function animateMovement(player, fromPos, toPos, steps, callback) {
+            if (gameState.isMoving) return;
+            gameState.isMoving = true;
+            
+            const isPlayer = player === 'player';
+            const pieceId = isPlayer ? 'playerPieceOnBoard' : 'aiPieceOnBoard';
+            let currentPos = fromPos;
+            let stepCount = 0;
+            
+            function moveStep() {
+                if (stepCount >= steps) {
+                    gameState.isMoving = false;
+                    if (callback) callback();
+                    return;
+                }
+                
+                stepCount++;
+                currentPos++;
+                
+                // Don't go beyond 100
+                if (currentPos > 100) {
+                    currentPos = 100;
+                }
+                
+                // Remove piece from current position
+                const piece = document.getElementById(pieceId);
+                if (piece) piece.remove();
+                
+                // Add piece to new position with walking animation
+                if (currentPos <= 100) {
+                    const cell = document.getElementById(`cell-${currentPos}`);
+                    const newPiece = document.createElement('div');
+                    newPiece.className = 'player-on-cell walking';
+                    newPiece.id = pieceId;
+                    newPiece.style.background = isPlayer ? gameState.playerColor : gameState.aiColor;
+                    newPiece.style.left = isPlayer ? '2px' : 'auto';
+                    newPiece.style.right = isPlayer ? 'auto' : '2px';
+                    newPiece.style.top = '2px';
+                    cell.appendChild(newPiece);
+                    
+                    // Play step sound
+                    playBeep(400 + (stepCount * 50), 0.1);
+                }
+                
+                setTimeout(moveStep, 300);
+            }
+            
+            moveStep();
+        }
+
+        function animateSpecialMove(player, fromPos, toPos, isBonus) {
+            const isPlayer = player === 'player';
+            const pieceId = isPlayer ? 'playerPieceOnBoard' : 'aiPieceOnBoard';
+            
+            // Remove piece from current position
+            const piece = document.getElementById(pieceId);
+            if (piece) piece.remove();
+            
+            // Add piece to destination with special animation
+            const cell = document.getElementById(`cell-${toPos}`);
+            const newPiece = document.createElement('div');
+            newPiece.className = `player-on-cell ${isBonus ? 'bonus-move' : 'penalty-move'}`;
+            newPiece.id = pieceId;
+            newPiece.style.background = isPlayer ? gameState.playerColor : gameState.aiColor;
+            newPiece.style.left = isPlayer ? '2px' : 'auto';
+            newPiece.style.right = isPlayer ? 'auto' : '2px';
+            newPiece.style.top = '2px';
+            cell.appendChild(newPiece);
+        }
+
+        function rollDice() {
+            if (!gameState.isGameActive || gameState.currentPlayer !== 'player' || gameState.isMoving) return;
+            
+            const dice = document.getElementById('dice');
+            const rollBtn = document.getElementById('rollBtn');
+            
+            dice.classList.add('rolling');
+            rollBtn.disabled = true;
+            playDiceSound();
+            
+            // Animate dice roll
+            let rollCount = 0;
+            const rollInterval = setInterval(() => {
+                dice.textContent = Math.floor(Math.random() * 6) + 1;
+                rollCount++;
+                
+                if (rollCount > 10) {
+                    clearInterval(rollInterval);
+                    const finalRoll = Math.floor(Math.random() * 6) + 1;
+                    dice.textContent = finalRoll;
+                    dice.classList.remove('rolling');
+                    
+                    movePlayer('player', finalRoll);
+                }
+            }, 100);
+        }
+
+        function movePlayer(player, steps) {
+            const isPlayer = player === 'player';
+            let currentPos = isPlayer ? gameState.playerPos : gameState.aiPos;
+            let newPos = currentPos + steps;
+            
+            // Can't go beyond 100
+            if (newPos > 100) {
+                newPos = 100;
+            }
+            
+            // Animate movement to new position
+            animateMovement(player, currentPos, newPos, Math.min(steps, 100 - currentPos), () => {
+                // Update position
+                if (isPlayer) {
+                    gameState.playerPos = newPos;
+                } else {
+                    gameState.aiPos = newPos;
+                }
+                
+                // Check for win FIRST
+                if (newPos >= 100) {
+                    gameState.isGameActive = false;
+                    updateGameDisplay();
+                    setTimeout(() => {
+                        showGameOver(player);
+                    }, 1000);
+                    return;
+                }
+                
+                // Check for special cells
+                if (gameState.specialCells[newPos]) {
+                    const special = gameState.specialCells[newPos];
+                    const isBonus = special.type === 'bonus';
+                    let finalPos;
+                    
+                    if (isBonus) {
+                        finalPos = Math.min(newPos + special.value, 100);
+                    } else {
+                        finalPos = Math.max(newPos - special.value, 1);
+                    }
+                    
+                    setTimeout(() => {
+                        // Show popup
+                        showBonusPopup(special.type, special.value, player);
+                        
+                        // Animate special movement
+                        animateSpecialMove(player, newPos, finalPos, isBonus);
+                        
+                        // Update final position
+                        if (isPlayer) {
+                            gameState.playerPos = finalPos;
+                        } else {
+                            gameState.aiPos = finalPos;
+                        }
+                        
+                        updateGameDisplay();
+                        
+                        // Check for win after special move
+                        if (finalPos >= 100) {
+                            gameState.isGameActive = false;
+                            setTimeout(() => {
+                                showGameOver(player);
+                            }, 1500);
+                            return;
+                        }
+                        
+                        // Continue with turn switching
+                        setTimeout(() => {
+                            switchTurns();
+                        }, 1500);
+                        
+                    }, 500);
+                } else {
+                    updateGameDisplay();
+                    
+                    // Switch turns
+                    setTimeout(() => {
+                        switchTurns();
+                    }, 1000);
+                }
+            });
+        }
+
+        function switchTurns() {
+            if (gameState.currentPlayer === 'player') {
+                gameState.currentPlayer = 'ai';
+                document.getElementById('gameStatus').textContent = "AI's turn...";
+                document.getElementById('rollBtn').disabled = true;
+                setTimeout(aiTurn, 1500);
+            } else {
+                gameState.currentPlayer = 'player';
+                document.getElementById('gameStatus').textContent = "Your turn! Roll the dice!";
+                document.getElementById('rollBtn').disabled = false;
+            }
+        }
+
+        function aiTurn() {
+            if (!gameState.isGameActive || gameState.isMoving) return;
+            
+            let aiRoll;
+            const difficulty = gameState.difficulty;
+            
+            // AI difficulty logic
+            switch (difficulty) {
+                case 'easy':
+                    aiRoll = Math.floor(Math.random() * 4) + 1; // 1-4
+                    break;
+                case 'medium':
+                    aiRoll = Math.floor(Math.random() * 6) + 1; // 1-6
+                    break;
+                case 'hard':
+                    aiRoll = Math.floor(Math.random() * 6) + 2; // 2-7 (capped at 6)
+                    if (aiRoll > 6) aiRoll = 6;
+                    break;
+                case 'expert':
+                    // Strategic AI - prefers higher rolls
+                    aiRoll = Math.random() < 0.7 ? Math.floor(Math.random() * 3) + 4 : Math.floor(Math.random() * 6) + 1;
+                    break;
+                case 'impossible':
+                    // Nearly always rolls high
+                    aiRoll = Math.random() < 0.9 ? Math.floor(Math.random() * 2) + 5 : Math.floor(Math.random() * 6) + 1;
+                    break;
+                default:
+                    aiRoll = Math.floor(Math.random() * 6) + 1;
+            }
+            
+            const dice = document.getElementById('dice');
+            dice.classList.add('rolling');
+            playDiceSound();
+            
+            // Animate AI dice roll
+            let rollCount = 0;
+            const rollInterval = setInterval(() => {
+                dice.textContent = Math.floor(Math.random() * 6) + 1;
+                rollCount++;
+                
+                if (rollCount > 8) {
+                    clearInterval(rollInterval);
+                    dice.textContent = aiRoll;
+                    dice.classList.remove('rolling');
+                    
+                    movePlayer('ai', aiRoll);
+                }
+            }, 100);
+        }
+
+        // Create particles
+        function createParticles() {
+            const particlesContainer = document.getElementById('particles');
+            
+            for (let i = 0; i < 50; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.top = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 6 + 's';
+                particle.style.animationDuration = (Math.random() * 4 + 4) + 's';
+                
+                const colors = ['#00ff88', '#0088ff', '#ff0088', '#ff8800', '#8800ff'];
+                particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                
+                particlesContainer.appendChild(particle);
+            }
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            createParticles();
+            setTimeout(() => {
+                playBootupSequence();
+            }, 1000);
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && gameState.currentPlayer === 'player' && gameState.isGameActive && !gameState.isMoving) {
+                e.preventDefault();
+                rollDice();
+            }
+        });
+
+        // Dynamic particle effects
+        setInterval(() => {
+            const particles = document.querySelectorAll('.particle');
+            particles.forEach(particle => {
+                if (Math.random() > 0.95) {
+                    particle.style.background = '#ffffff';
+                    setTimeout(() => {
+                        const colors = ['#00ff88', '#0088ff', '#ff0088', '#ff8800', '#8800ff'];
+                        particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    }, 100);
+                }
+            });
+        }, 500);
+    </script>
+</body>
+</html>

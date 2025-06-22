@@ -201,24 +201,37 @@ async function checkAndPost() {
   }
 }
 
-let isRunning = false;
+function getDelayToNext5MinutePH() {
+  const now = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+  const current = new Date(now);
+  const ms = current.getMilliseconds();
+  const seconds = current.getSeconds();
+  const minutes = current.getMinutes();
 
-function startAutoPoster() {
-  if (isRunning) return;
-  isRunning = true;
-  console.log(`🚀 Auto-poster started at ${formatPHTime()}.`);
-  async function runCheck() {
-    const nextInterval = await checkAndPost();
-    setTimeout(runCheck, nextInterval);
-  }
-  runCheck();
+  const minutesToNext = 5 - (minutes % 5);
+  const delay = (minutesToNext * 60 - seconds) * 1000 - ms;
+  return delay;
 }
 
-app.get("/", (req, res) => {
-  res.send(`🚀 Grow-a-Garden Auto Poster is running. Updated: ${formatPHTime()}`);
+function startAutoPosterEvery5Min() {
+  const delay = getDelayToNext5MinutePH();
+  console.log(`🕐 First post scheduled in ${Math.ceil(delay / 1000)} seconds.`);
+
+  setTimeout(async () => {
+    await checkAndPost();
+    setInterval(checkAndPost, 5 * 60 * 1000); // Every 5 minutes
+  }, delay);
+}
+
+// Serve /doc from public/doc.html
+app.use('/doc', express.static(path.join(__dirname, 'public'), { index: 'doc.html' }));
+
+// Redirect root / to /doc
+app.get('/', (req, res) => {
+  res.redirect('/doc');
 });
 
 app.listen(PORT, () => {
   console.log(`🌐 Server is listening on port ${PORT}`);
-  startAutoPoster();
+  startAutoPosterEvery5Min();
 });
