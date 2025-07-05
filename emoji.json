@@ -10,43 +10,60 @@
   "Paradise Egg": "🏝️🥚",
   "Bee Egg": "🐝🥚",
   "Anti Bee Egg": "🚫🐝🥚",
+  "Dinosaur Egg": "🦖🥚",               // 🆕
+  "Mutated Egg": "☣️🥚",              // 🆕
 
   "Sign Crate": "🪧📦",
-  "Blue Hammock": "🔹🛏️",
-  "Medium Wood Flooring": "🪵🟫",
-  "Small Stone Pad": "🪨🧱",
-  "Small Stone Table": "🪨🍽️",
-  "Medium Circle Tile": "⚪🔘",
-  "Mini TV": "📺🪟",
-  "Medium Path Tile": "🛣️🟦",
-  "Bee Chair": "🐝🪑",
-  "Lavender": "💜🌿",
-  "Honey Torch": "🍯🔥",
+  "Bee Crate": "📦🐝",
+  "Dino Crate": "📦🦕",               // 🆕
+
+  "Basic Seed Pack": "🎒",
+  "Flower Seed Pack": "🌸",
+  "Summer Seed Pack": "🌻",
+  "Crafters Seed Pack": "🎁",
+  "Ancient Seed Pack": "🦴🌱",         // 🆕
+  "Exotic Ancient Seed Pack": "🔥🦴🌱", // 🆕
+
+  "Sugar Apple": "🍏✨",               // 🆕
+
   "Watering Can": "🚿",
   "Trowel": "🛠️",
   "Recall Wrench": "🔧",
+  "Harvest Tool": "🌾",
+  "Favorite Tool": "🧰",
+  "Shovel": "⛏️",
+  "Rake": "🧹",
+
   "Basic Sprinkler": "💧",
   "Advanced Sprinkler": "💦",
   "Godly Sprinkler": "⛲",
   "Master Sprinkler": "🌊",
+  "Chocolate Sprinkler": "🍫💦",
+  "Flower Froster Sprinkler": "❄️💦",
+  "Spice Spritzer Sprinkler": "🌶️💦",
+  "Sweet Soaker Sprinkler": "🍉💦",
+  "Stalk Sprout Sprinkler": "🌱💦",
+  "Tropical Mist Sprinkler": "🌴💦",
+  "Berry Blusher Sprinkler": "🍓💦",
+
   "Lightning Rod": "⚡",
   "Reclaimer": "♻️",
-  "Harvest Tool": "🌾",
-  "Cleaning Spray": "🧴",
-  "Favorite Tool": "🧰",
-  "Chocolate Sprinkler": "🍫💦",
   "Star Caller": "🌟",
   "Night Staff": "🌃",
   "Nectar Staff": "🍯✨",
   "Pollen Radar": "📡🐝",
   "Friendship Pot": "🌸🏺",
 
-  "Spice Spritzer Sprinkler": "🌶️💦",
-  "Sweet Soaker Sprinkler": "🍉💦",
-  "Stalk Sprout Sprinkler": "🌱💦",
-  "Tropical Mist Sprinkler": "🌴💦",
-  "Berry Blusher Sprinkler": "🍓💦",
-  "Flower Froster Sprinkler": "❄️💦",
+  "Compost Bin": "🗑️",
+  "Honey Torch": "🍯🔥",
+  "Cleaning Spray": "🧴",
+  "Mutation Spray Choc": "🟤🧴",
+  "Mutation Spray Pollinated": "🟣🧴",
+  "Mutation Spray Shocked": "🔌🧴",
+  "Amber Mutation Spray": "🧡🧴",      // 🆕
+
+  "Anti Bee Egg": "🚫🐝🥚",
+  "Pack Bee": "📦🐝+",                 // 🆕
 
   "Carrot": "🥕",
   "Wild Carrot": "🥕🌿",
@@ -79,28 +96,26 @@
   "Cacao": "🍫",
   "Cauliflower": "🥦",
 
-  "Ember Lily": "🏵️",
   "Daffodil": "🌼",
   "Orange Tulip": "🌷",
   "Rosy Delight": "🌸",
   "Parasol Flower": "☂️🌸",
   "Elephant Ears": "🪻",
+  "Ember Lily": "🏵️",
 
-  "Flower Seed Pack": "🌸",
-  "Summer Seed Pack": "🌻",
-  "Crafters Seed Pack": "🎁",
-  "Basic Seed Pack": "🎒",
-  "Bee Crate": "📦",
-  "Honey Comb": "🍯",
-
-  "Mutation Spray Choc": "🟤🧴",
-  "Mutation Spray Pollinated": "🟣🧴",
-  "Mutation Spray Shocked": "🔌🧴",
+  "Stonebite": "🪨🌱",                 // 🆕
+  "Paradise Petal": "🏝️🌸",           // 🆕
+  "Horned Dinoshroom": "🦕🍄",        // 🆕
+  "Boneboo": "💀🎍",                   // 🆕
+  "Firefly Fern": "✨🌿",              // 🆕
+  "Fossilight Fruit": "💡🍈",         // 🆕
+  "Bone Blossom": "🦴🌸",              // 🆕
 
   "Tiki Bar": "🏖️",
   "Lemonade Stand": "🍋",
   "Market Cart": "🛒",
   "Hammock": "🛏️",
+  "Blue Hammock": "🔹🛏️",
   "Cabana": "🏝️",
   "Cooler Chest (blue)": "🧊",
   "Cooler Chest (red)": "🧊",
@@ -119,23 +134,30 @@
   "Fun Gnome": "🎉",
   "Statue": "🗿",
   "Sign Post": "🪧",
-  "Compost Bin": "🗑️",
+
   "Torch": "🔥",
   "Campfire": "🔥",
   "Cooking Pot": "🍲",
   "Red Pottery": "🏺",
   "Stone Lantern": "🏮",
   "Small Circle Tile": "🔘",
-  "Log Bench": "🪑",
+  "Medium Circle Tile": "⚪🔘",
+  "Small Stone Pad": "🪨🧱",
+  "Medium Path Tile": "🛣️🟦",
   "Wood Flooring": "🪵",
+  "Medium Wood Flooring": "🪵🟫",
+
   "Swing Set": "🎠",
   "Seesaw": "🎠",
   "Roundabout": "🎠",
   "Trampoline": "🎠",
-  "Toolbox": "🧰",
+  "Log Bench": "🪑",
+  "Bee Chair": "🐝🪑",
+
+  "Mini TV": "📺🪟",
   "TV Set": "📺",
-  "Rake": "🧹",
-  "Shovel": "⛏️",
+  "Toolbox": "🧰",
+
   "Fence": "🪵",
   "Flag (Red)": "🚩",
   "Flag (Blue)": "🚩",
@@ -149,6 +171,14 @@
   "Orangutan": "🦧",
   "Mimic Octopus": "🐙",
   "Macaw": "🦜",
-  "Magnifying Glass": "🔎",
-  "Crab": "🦀"
+  "Crab": "🦀",
+
+  "Raptor": "🦖",
+  "Stegosaurus": "🦕",
+  "Triceratops": "🐃",
+  "Pterodactyl": "🦅",
+  "Brontosaurus": "🦕🌿",
+  "T-Rex": "🦖👑",
+
+  "Magnifying Glass": "🔎"
 }
