@@ -10,21 +10,21 @@
   "Paradise Egg": "🏝️🥚",
   "Bee Egg": "🐝🥚",
   "Anti Bee Egg": "🚫🐝🥚",
-  "Dinosaur Egg": "🦖🥚",               // 🆕
-  "Mutated Egg": "☣️🥚",              // 🆕
+  "Dinosaur Egg": "🦖🥚",
+  "Mutated Egg": "☣️🥚",
 
   "Sign Crate": "🪧📦",
   "Bee Crate": "📦🐝",
-  "Dino Crate": "📦🦕",               // 🆕
+  "Dino Crate": "📦🦕",
 
   "Basic Seed Pack": "🎒",
   "Flower Seed Pack": "🌸",
   "Summer Seed Pack": "🌻",
   "Crafters Seed Pack": "🎁",
-  "Ancient Seed Pack": "🦴🌱",         // 🆕
-  "Exotic Ancient Seed Pack": "🔥🦴🌱", // 🆕
+  "Ancient Seed Pack": "🦴🌱",
+  "Exotic Ancient Seed Pack": "🔥🦴🌱",
 
-  "Sugar Apple": "🍏✨",               // 🆕
+  "Sugar Apple": "🍏✨",
 
   "Watering Can": "🚿",
   "Trowel": "🛠️",
@@ -60,10 +60,10 @@
   "Mutation Spray Choc": "🟤🧴",
   "Mutation Spray Pollinated": "🟣🧴",
   "Mutation Spray Shocked": "🔌🧴",
-  "Amber Mutation Spray": "🧡🧴",      // 🆕
+  "Amber Mutation Spray": "🧡🧴",
 
   "Anti Bee Egg": "🚫🐝🥚",
-  "Pack Bee": "📦🐝+",                 // 🆕
+  "Pack Bee": "📦🐝+",
 
   "Carrot": "🥕",
   "Wild Carrot": "🥕🌿",
@@ -103,13 +103,13 @@
   "Elephant Ears": "🪻",
   "Ember Lily": "🏵️",
 
-  "Stonebite": "🪨🌱",                 // 🆕
-  "Paradise Petal": "🏝️🌸",           // 🆕
-  "Horned Dinoshroom": "🦕🍄",        // 🆕
-  "Boneboo": "💀🎍",                   // 🆕
-  "Firefly Fern": "✨🌿",              // 🆕
-  "Fossilight Fruit": "💡🍈",         // 🆕
-  "Bone Blossom": "🦴🌸",              // 🆕
+  "Stonebite": "🪨🌱",
+  "Paradise Petal": "🏝️🌸",
+  "Horned Dinoshroom": "🦕🍄",
+  "Boneboo": "💀🎍",
+  "Firefly Fern": "✨🌿",
+  "Fossilight Fruit": "💡🍈",
+  "Bone Blossom": "🦴🌸",
 
   "Tiki Bar": "🏖️",
   "Lemonade Stand": "🍋",
