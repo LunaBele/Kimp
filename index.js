@@ -41,7 +41,8 @@ function formatPHTime() {
 }
 
 function parseCountdown(countdown) {
-  const match = countdown?.match(/(\d+)h\s+(\d+)m\s+(\d+)s/);
+  if (!countdown) return 0;
+  const match = countdown.match(/(\d+)h\s+(\d+)m\s+(\d+)s/);
   if (!match) return 0;
   const [, h, m, s] = match.map(Number);
   return (h * 3600 + m * 60 + s) * 1000;
@@ -57,14 +58,42 @@ function formatCountdown(countdown) {
 }
 
 function summarizeSection(title, icon, section) {
+  if (!section?.items?.length) return `\n\n${icon} ${title} — ❌ Out of Stock`;
   const counts = section.items.reduce((acc, { name, quantity }) => {
     acc[name] = (acc[name] || 0) + quantity;
     return acc;
   }, {});
   const lines = Object.entries(counts)
-    .map(([name, qty]) => `- ${EMOJIS[name] || "🔹"} ${name}: x${qty}`)
+    .map(([name, qty]) => `• ${EMOJIS[name] || "🔹"} ${name} ×${qty}`)
     .join("\n");
-  return `\n\n${icon} ${title} (⏱ ${formatCountdown(section.countdown)})\n${lines}`;
+  return `\n\n${title}\n⏳ Restock In: ${formatCountdown(section.countdown)}\n${lines}`;
+}
+
+function summarizeMerchant(merchant) {
+  if (merchant.status === "leaved" && merchant.appearIn) {
+    const ms = parseCountdown(merchant.appearIn);
+    const now = new Date();
+    const appearTime = new Date(now.getTime() + ms);
+    const timeStr = appearTime.toLocaleTimeString("en-PH", {
+      timeZone: "Asia/Manila",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    });
+    return (
+      `\n\n🧳 Traveling Merchant\n` +
+      `📤 Status: Left the garden\n` +
+      `⏳ Returns In: ${merchant.appearIn}\n` +
+      `🕒 Will Return At: ${timeStr}`
+    );
+  } else if (merchant.status === "arrived") {
+    const lines = merchant.items.map(
+      item => `• ${item.emoji || "📦"} ${item.name} ×${item.quantity}`
+    ).join("\n");
+    return `\n\n🧳 Traveling Merchant\n⏳ Leaves In: ${formatCountdown(merchant.countdown)}\n${lines}`;
+  }
+  return "";
 }
 
 function hashData(data) {
@@ -88,7 +117,6 @@ function cleanStockForHashing(stock) {
 
 function updateEnvToken(newToken) {
   const envPath = path.resolve(".env");
-
   if (!fs.existsSync(envPath)) {
     console.warn("⚠️ Skipping .env update — not supported in Render.");
     console.log(`📌 Long-lived token:\n${newToken}\n\nPaste it manually into your Render Dashboard.`);
@@ -99,7 +127,6 @@ function updateEnvToken(newToken) {
   envContent = envContent
     .replace(/^PAGE_ACCESS_TOKEN=.*$/m, "PAGE_ACCESS_TOKEN=//exchange for only")
     .replace(/^LONG_PAGE_ACCESS_TOKEN=.*$/m, `LONG_PAGE_ACCESS_TOKEN=${newToken}`);
-
   fs.writeFileSync(envPath, envContent, "utf8");
   console.log("✅ .env updated with long-lived token.");
 }
@@ -183,13 +210,21 @@ async function checkAndPost() {
     }
 
     const message =
-      `🌱 Grow-a-Garden Stock Update\n` +
-      summarizeSection("Gear", "🛠️", stock.gear) +
-      summarizeSection("Seeds", "🌱", stock.seed) +
-      summarizeSection("Eggs", "🥚", stock.egg) +
-      summarizeSection("Cosmetics", "🎨", stock.cosmetics) +
-      summarizeSection("Honey", "🍯", stock.honey) +
-      `\n\n📅 Updated: ${formatPHTime()}`;
+      `🌿✨ 𝗚𝗿𝗼𝘄-𝗮-𝗚𝗮𝗿𝗱𝗲𝗻 𝗦𝘁𝗼𝗰𝗸 𝗨𝗽𝗱𝗮𝘁𝗲 ✨🌿\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      summarizeSection("🛠️ Gear", "🛠️", stock.gear) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      summarizeSection("🌱 Seeds", "🌱", stock.seed) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      summarizeSection("🥚 Eggs", "🥚", stock.egg) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      summarizeSection("🎨 Cosmetics", "🎨", stock.cosmetics) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      summarizeSection("🍯 Honey", "🍯", stock.honey) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      summarizeMerchant(stock.travelingmerchant) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      `📆 𝗟𝗮𝘀𝘁 𝗨𝗽𝗱𝗮𝘁𝗲: ${formatPHTime()}`;
 
     await postToFacebook(message);
     saveHash(CONFIG.HASH_FILE, stockHash);
