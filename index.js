@@ -1,10 +1,10 @@
 require("dotenv").config();
-const express = require("express");
 const axios = require("axios");
 const fs = require("fs");
 const crypto = require("crypto");
 const FormData = require("form-data");
 const path = require("path");
+const express = require("express");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,24 +22,12 @@ const CONFIG = {
 };
 
 if (!CONFIG.APP_ID || !CONFIG.APP_SECRET || !CONFIG.PAGE_ID) {
-  console.error("❌ Required env vars missing: APP_ID, APP_SECRET, PAGE_ID.");
+  console.error("❌ APP_ID, APP_SECRET, and PAGE_ID must be set in .env");
   process.exit(1);
 }
 
-// Load emoji and rarity definitions
-const EMOJIS = safeJsonLoad("emoji.json");
-const RARITY = safeJsonLoad("rarity.json");
+const EMOJIS = JSON.parse(fs.readFileSync(path.resolve("emoji.json"), "utf8"));
 
-function safeJsonLoad(filePath) {
-  try {
-    return JSON.parse(fs.readFileSync(path.resolve(filePath), "utf8"));
-  } catch {
-    console.warn(`⚠️ Failed to load JSON file: ${filePath}`);
-    return {};
-  }
-}
-
-// ⏰ Format PH time
 function formatPHTime() {
   return new Date().toLocaleString("en-PH", {
     timeZone: "Asia/Manila",
@@ -52,90 +40,102 @@ function formatPHTime() {
   });
 }
 
-// 🔁 Countdown parsing and formatting
-function parseCountdown(str) {
-  const match = str?.match(/(\d+)h\s+(\d+)m\s+(\d+)s/);
+function parseCountdown(countdown) {
+  const match = countdown?.match(/(\d+)h\s+(\d+)m\s+(\d+)s/);
   if (!match) return 0;
   const [, h, m, s] = match.map(Number);
   return (h * 3600 + m * 60 + s) * 1000;
 }
 
-function formatCountdown(str) {
+function formatCountdownFancy(str) {
   const ms = parseCountdown(str);
-  if (ms <= 0) return "Restock imminent";
+  if (ms <= 0) return "ʀᴇꜱᴛᴏᴄᴋ ɪᴍᴍɪɴᴇɴᴛ";
+
   const h = String(Math.floor(ms / 3600000)).padStart(2, "0");
   const m = String(Math.floor((ms % 3600000) / 60000)).padStart(2, "0");
   const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, "0");
-  return `${h}h ${m}m ${s}s`;
+
+  return `${h}ʜ ${m}ᴍ ${s}ꜱ`;
 }
 
-// 📦 Summarize item sections
+function stylizeText(str) {
+  const map = {
+    a: "ᴀ", b: "ʙ", c: "ᴄ", d: "ᴅ", e: "ᴇ", f: "ꜰ", g: "ɢ", h: "ʜ",
+    i: "ɪ", j: "ᴊ", k: "ᴋ", l: "ʟ", m: "ᴍ", n: "ɴ", o: "ᴏ", p: "ᴘ",
+    q: "ǫ", r: "ʀ", s: "ꜱ", t: "ᴛ", u: "ᴜ", v: "ᴠ", w: "ᴡ", x: "x",
+    y: "ʏ", z: "ᴢ", " ": " "
+  };
+  return str.toLowerCase().split("").map(ch => map[ch] || ch).join("");
+}
+
+function getEmoji(name) {
+  return EMOJIS[name] || "🔹";
+}
+
 function summarizeSection(title, icon, section) {
-  if (!section?.items?.length) return `\n\n${icon} ${title} — ❌ Out of Stock`;
+  const prettyTitle = `\n\n${icon} 𝐆𝐞𝐚𝐫 𝐒𝐡𝐨𝐩`.replace(/Gear Shop/i, title);
+  const timerLine = `⏳ ${formatCountdownFancy(section?.countdown)}`;
 
-  const counts = section.items.reduce((acc, { name, quantity }) => {
-    acc[name] = (acc[name] || 0) + quantity;
-    return acc;
-  }, {});
-
-  const lines = Object.entries(counts).map(([name, qty]) => {
-    return `• ${getEmoji(name)} ${name} ×${qty} "${getRarity(name)}"`;
-  });
-
-  return `\n\n${icon} ${title}\n⏳ Restock In: ${formatCountdown(section.countdown)}\n${lines.join("\n")}`;
-}
-
-// 🚚 Merchant logic
-function summarizeMerchant(merchant) {
-  if (!merchant || merchant.status === "leaved") {
-    if (!merchant?.appearIn) return "\n\n🛒 Traveling Merchant — Not Available";
-
-    const ms = parseCountdown(merchant.appearIn);
-    const eta = new Date(Date.now() + ms).toLocaleTimeString("en-PH", {
-      timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", hour12: true
-    });
-
-    return `\n\n🛒 Traveling Merchant — 📦 Coming back in ${merchant.appearIn} (~${eta})`;
+  if (!section?.items?.length) {
+    return `${prettyTitle}\n${timerLine}\n❌ ᴏᴜᴛ ᴏꜰ ꜱᴛᴏᴄᴋ`;
   }
 
-  const items = merchant.items.map(({ name, quantity }) => {
-    return `• ${getEmoji(name)} ${name} ×${quantity} "${getRarity(name)}"`;
+  const counts = {};
+  section.items.forEach(({ name, quantity }) => {
+    counts[name] = (counts[name] || 0) + quantity;
   });
 
-  return `\n\n🛒 Traveling Merchant\n⏳ Time Left: ${formatCountdown(merchant.countdown)}\n${items.join("\n")}`;
+  const lines = Object.entries(counts)
+    .map(([name, qty]) => `• ${getEmoji(name)} ${stylizeText(name)} *${qty}`)
+    .join("\n");
+
+  return `${prettyTitle}\n${timerLine}\n${lines}`;
 }
 
-// ⭐ Recommended items
-function generateRecommendedItems(stock) {
-  const preferred = ["Master Sprinkler", "Magnifying Glass", "Beanstalk", "Sugar Apple"];
+function summarizeMerchant(merchant) {
+  const title = `\n\n🛒 𝐓𝐫𝐚𝐯𝐞𝐥𝐢𝐧𝐠 𝐌𝐞𝐫𝐜𝐡𝐚𝐧𝐭`;
 
-  const items = [
-    ...stock.gear?.items || [],
-    ...stock.seed?.items || [],
-    ...stock.egg?.items || [],
-    ...stock.honey?.items || [],
-    ...stock.cosmetics?.items || [],
-    ...stock.travelingmerchant?.items || [],
+  if (!merchant || merchant.status === "leaved") {
+    if (!merchant?.appearIn) return `${title}\n❌ ɴᴏᴛ ᴀᴠᴀɪʟᴀʙʟᴇ`;
+
+    const eta = new Date(Date.now() + parseCountdown(merchant.appearIn)).toLocaleTimeString("en-PH", {
+      timeZone: "Asia/Manila",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    return `${title}\n⏳ ᴄᴏᴍɪɴɢ ʙᴀᴄᴋ ɪɴ: ${stylizeText(merchant.appearIn)} (~${eta})`;
+  }
+
+  const lines = merchant.items.map(({ name, quantity }) =>
+    `• ${getEmoji(name)} ${stylizeText(name)} *${quantity}`
+  ).join("\n");
+
+  return `${title}\n⏳ ${formatCountdownFancy(merchant.countdown)}\n${lines}`;
+}
+
+function generateRecommendedItems(stock) {
+  const favorites = ["Master Sprinkler", "Magnifying Glass", "Beanstalk", "Sugar Apple"];
+  const all = [
+    ...(stock.gear?.items || []),
+    ...(stock.seed?.items || []),
+    ...(stock.egg?.items || []),
+    ...(stock.honey?.items || []),
+    ...(stock.cosmetics?.items || []),
+    ...(stock.travelingmerchant?.items || [])
   ];
 
-  const recommended = preferred.map(name => {
-    const found = items.find(i => i.name === name);
-    return found ? `• ${getEmoji(name)} ${name} ×${found.quantity}` : null;
+  const matched = favorites.map(name => {
+    const found = all.find(item => item.name === name);
+    return found ? `• ${getEmoji(name)} ${stylizeText(name)} *${found.quantity}` : null;
   }).filter(Boolean);
 
-  return recommended.length ? `\n\n📝 𝗥𝗲𝗰𝗼𝗺𝗺𝗲𝗻𝗱𝗲𝗱 𝘁𝗼 𝗚𝗲𝘁:\n${recommended.join("\n")}` : "";
+  return matched.length ? `\n\n📝 ʀᴇᴄᴏᴍᴍᴇɴᴅᴇᴅ ɪᴛᴇᴍꜱ:\n${matched.join("\n")}` : "";
 }
 
-// 🔒 Hash and store stock
 function hashData(data) {
   return crypto.createHash("sha256").update(JSON.stringify(data)).digest("hex");
-}
-
-function cleanStockForHashing(stock) {
-  const clone = structuredClone(stock);
-  delete clone.updated_at;
-  Object.values(clone).forEach(obj => obj && delete obj.updated_at);
-  return clone;
 }
 
 function loadHash(file) {
@@ -146,139 +146,142 @@ function saveHash(file, hash) {
   fs.writeFileSync(file, hash, "utf8");
 }
 
-// 🔑 Facebook access token exchange
-async function getOrExchangeLongLivedToken() {
-  if (CONFIG.LONG_PAGE_ACCESS_TOKEN) return CONFIG.LONG_PAGE_ACCESS_TOKEN;
-
-  try {
-    const { data } = await axios.get("https://graph.facebook.com/oauth/access_token", {
-      params: {
-        grant_type: "fb_exchange_token",
-        client_id: CONFIG.APP_ID,
-        client_secret: CONFIG.APP_SECRET,
-        fb_exchange_token: CONFIG.PAGE_ACCESS_TOKEN,
-      },
-    });
-
-    updateEnvToken(data.access_token);
-    return data.access_token;
-  } catch (err) {
-    console.error("❌ Token exchange failed:", err.response?.data || err.message);
-    return null;
-  }
+function cleanStockForHashing(stock) {
+  const clone = JSON.parse(JSON.stringify(stock));
+  delete clone.updated_at;
+  for (const key of Object.keys(clone)) delete clone[key]?.updated_at;
+  return clone;
 }
 
 function updateEnvToken(newToken) {
   const envPath = path.resolve(".env");
   if (!fs.existsSync(envPath)) {
-    console.log("📌 Long-lived token:\n" + newToken);
+    console.warn("⚠️ Skipping .env update — not supported in Render.");
+    console.log(`📌 Long-lived token:\n${newToken}`);
     return;
   }
-
-  let env = fs.readFileSync(envPath, "utf8");
-  env = env.replace(/^LONG_PAGE_ACCESS_TOKEN=.*$/m, `LONG_PAGE_ACCESS_TOKEN=${newToken}`);
-  env = env.replace(/^PAGE_ACCESS_TOKEN=.*$/m, "PAGE_ACCESS_TOKEN=//exchange for only");
-  fs.writeFileSync(envPath, env, "utf8");
-  console.log("✅ .env updated with new long-lived token.");
+  let envContent = fs.readFileSync(envPath, "utf8");
+  envContent = envContent
+    .replace(/^PAGE_ACCESS_TOKEN=.*$/m, "PAGE_ACCESS_TOKEN=//exchange for only")
+    .replace(/^LONG_PAGE_ACCESS_TOKEN=.*$/m, `LONG_PAGE_ACCESS_TOKEN=${newToken}`);
+  fs.writeFileSync(envPath, envContent, "utf8");
+  console.log("✅ .env updated with long-lived token.");
 }
 
-// 📤 Post to Facebook
+async function getOrExchangeLongLivedToken() {
+  if (CONFIG.LONG_PAGE_ACCESS_TOKEN) return CONFIG.LONG_PAGE_ACCESS_TOKEN;
+  try {
+    const url = `https://graph.facebook.com/oauth/access_token`;
+    const params = {
+      grant_type: "fb_exchange_token",
+      client_id: CONFIG.APP_ID,
+      client_secret: CONFIG.APP_SECRET,
+      fb_exchange_token: CONFIG.PAGE_ACCESS_TOKEN,
+    };
+    const res = await axios.get(url, { params });
+    const longToken = res.data.access_token;
+    updateEnvToken(longToken);
+    return longToken;
+  } catch (err) {
+    console.error("❌ Failed to exchange for long-lived token:", err.response?.data || err.message);
+    return CONFIG.LONG_PAGE_ACCESS_TOKEN || null;
+  }
+}
+
 async function postToFacebook(message) {
   const token = await getOrExchangeLongLivedToken();
-  if (!token) return;
-
+  if (!token) {
+    console.error("❌ No valid access token available.");
+    return;
+  }
   try {
     if (!fs.existsSync(CONFIG.TEMP_IMAGE_PATH)) throw new Error("Image not found.");
-
     const form = new FormData();
     form.append("message", message);
     form.append("access_token", token);
     form.append("published", "true");
     form.append("source", fs.createReadStream(CONFIG.TEMP_IMAGE_PATH));
-
-    const { data } = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, {
-      headers: form.getHeaders(),
+    const res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, {
+      headers: form.getHeaders()
     });
-
-    console.log("✅ Posted to Facebook. ID:", data.post_id || data.id);
-  } catch (err) {
-    console.error("❌ Facebook post failed:", err.response?.data?.error?.message || err.message);
+    console.log("✅ Posted to Facebook. Post ID:", res.data.post_id || res.data.id);
+  } catch (error) {
+    console.error("❌ Failed to post to Facebook:", error.response?.data?.error?.message || error.message);
   }
 }
 
-// 🔄 Main logic
 async function checkAndPost() {
-  let nextInterval = CONFIG.DEFAULT_CHECK_INTERVAL_MS;
+  let nextCheckInterval = CONFIG.DEFAULT_CHECK_INTERVAL_MS;
   try {
-    const { data: raw } = await axios.get(CONFIG.STOCK_URL);
-    const stock = raw.data || raw;
+    const stockRes = await axios.get(CONFIG.STOCK_URL);
+    const stock = stockRes.data.data || stockRes.data;
 
     const countdowns = [
-      stock.egg, stock.gear, stock.seed, stock.honey, stock.cosmetics
-    ].map(s => parseCountdown(s?.countdown)).filter(Boolean);
+      parseCountdown(stock.egg?.countdown),
+      parseCountdown(stock.gear?.countdown),
+      parseCountdown(stock.seed?.countdown),
+      parseCountdown(stock.honey?.countdown),
+      parseCountdown(stock.cosmetics?.countdown),
+    ].filter(ms => ms > 0);
 
-    if (countdowns.length) nextInterval = Math.min(...countdowns) + 1000;
+    if (countdowns.length === 0) return 1000;
+    nextCheckInterval = Math.min(...countdowns) + 1000;
 
-    const currentHash = hashData(cleanStockForHashing(stock));
-    const previousHash = loadHash(CONFIG.HASH_FILE);
+    const stockHash = hashData(cleanStockForHashing(stock));
+    const prevStockHash = loadHash(CONFIG.HASH_FILE);
 
-    if (currentHash === previousHash) {
-      console.log(`ℹ️ No update as of ${formatPHTime()}`);
-      return nextInterval;
+    if (stockHash === prevStockHash) {
+      console.log(`ℹ️ No changes detected as of ${formatPHTime()}.`);
+      return nextCheckInterval;
     }
 
     const message = [
-      `🌿✨ 𝗚𝗿𝗼𝘄-𝗮-𝗚𝗮𝗿𝗱𝗲𝗻 𝗦𝘁𝗼𝗰𝗸 𝗨𝗽𝗱𝗮𝘁𝗲 ✨🌿`,
+      `🌿✨ 𝐆𝐫𝐨𝐰-𝐚-𝐆𝐚𝐫𝐝𝐞𝐧 𝗦𝘁𝗼𝗰𝗸 𝗨𝗽𝗱𝗮𝘁𝗲 ✨🌿`,
       `━━━━━━━━━━━━━━━━━━━━`,
-      summarizeSection("Gear", "🛠️", stock.gear),
-      `━━━━━━━━━━━━━━━━━━━━`,
-      summarizeSection("Seeds", "🌱", stock.seed),
-      `━━━━━━━━━━━━━━━━━━━━`,
-      summarizeSection("Eggs", "🥚", stock.egg),
-      `━━━━━━━━━━━━━━━━━━━━`,
+      summarizeSection("Gear Shop", "🛠️", stock.gear),
+      summarizeSection("Seed Store", "🌱", stock.seed),
+      summarizeSection("Egg Collection", "🥚", stock.egg),
       summarizeSection("Cosmetics", "🎨", stock.cosmetics),
-      `━━━━━━━━━━━━━━━━━━━━`,
-      summarizeSection("Honey", "🍯", stock.honey),
-      `━━━━━━━━━━━━━━━━━━━━`,
+      summarizeSection("Honey Store", "🍯", stock.honey),
       summarizeMerchant(stock.travelingmerchant),
       `━━━━━━━━━━━━━━━━━━━━`,
-      `📅 𝗟𝗮𝘀𝘁 𝗨𝗽𝗱𝗮𝘁𝗲: ${formatPHTime()}`,
-      generateRecommendedItems(stock)
+      generateRecommendedItems(stock),
+      `\n📅 Last Update: ${formatPHTime()}`
     ].join("\n");
 
     await postToFacebook(message);
-    saveHash(CONFIG.HASH_FILE, currentHash);
+    saveHash(CONFIG.HASH_FILE, stockHash);
+    return nextCheckInterval;
   } catch (err) {
-    console.error(`❌ Error during update (${formatPHTime()}):`, err.message);
+    console.error(`❌ Error during check/post at ${formatPHTime()}:`, err.message);
+    return nextCheckInterval;
   }
-  return nextInterval;
 }
 
-// 🕒 Calculate delay to next 5-minute interval
 function getDelayToNext5MinutePH() {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const delayMs = ((5 - (now.getMinutes() % 5)) * 60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-  return delayMs;
+  const now = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+  const current = new Date(now);
+  const ms = current.getMilliseconds();
+  const seconds = current.getSeconds();
+  const minutes = current.getMinutes();
+  const minutesToNext = 5 - (minutes % 5);
+  const delay = (minutesToNext * 60 - seconds) * 1000 - ms;
+  return delay;
 }
 
 function startAutoPosterEvery5Min() {
   const delay = getDelayToNext5MinutePH();
-  console.log(`🕐 First post in ${Math.ceil(delay / 1000)} seconds...`);
+  console.log(`🕐 First post scheduled in ${Math.ceil(delay / 1000)} seconds.`);
   setTimeout(async () => {
     await checkAndPost();
     setInterval(checkAndPost, 5 * 60 * 1000);
   }, delay);
 }
 
-// 🧠 Utility lookup
-const getEmoji = name => EMOJIS[name] || "🔹";
-const getRarity = name => RARITY[name] || "Unknown";
-
-// 🌐 Express routes
-app.use("/doc", express.static(path.join(__dirname, "public"), { index: "doc.html" }));
-app.get("/", (_, res) => res.redirect("/doc"));
-
+// Serve /doc from public/doc.html
+app.use('/doc', express.static(path.join(__dirname, 'public'), { index: 'doc.html' }));
+app.get('/', (req, res) => res.redirect('/doc'));
 app.listen(PORT, () => {
-  console.log(`🌐 Server running on port ${PORT}`);
+  console.log(`🌐 Server is listening on port ${PORT}`);
   startAutoPosterEvery5Min();
 });
