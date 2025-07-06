@@ -153,21 +153,6 @@ function cleanStockForHashing(stock) {
   return clone;
 }
 
-function updateEnvToken(newToken) {
-  const envPath = path.resolve(".env");
-  if (!fs.existsSync(envPath)) {
-    console.warn("⚠️ Skipping .env update — not supported in Render.");
-    console.log(`📌 Long-lived token:\n${newToken}`);
-    return;
-  }
-  let envContent = fs.readFileSync(envPath, "utf8");
-  envContent = envContent
-    .replace(/^PAGE_ACCESS_TOKEN=.*$/m, "PAGE_ACCESS_TOKEN=//exchange for only")
-    .replace(/^LONG_PAGE_ACCESS_TOKEN=.*$/m, `LONG_PAGE_ACCESS_TOKEN=${newToken}`);
-  fs.writeFileSync(envPath, envContent, "utf8");
-  console.log("✅ .env updated with long-lived token.");
-}
-
 async function getOrExchangeLongLivedToken() {
   if (CONFIG.LONG_PAGE_ACCESS_TOKEN) return CONFIG.LONG_PAGE_ACCESS_TOKEN;
   try {
@@ -180,7 +165,6 @@ async function getOrExchangeLongLivedToken() {
     };
     const res = await axios.get(url, { params });
     const longToken = res.data.access_token;
-    updateEnvToken(longToken);
     return longToken;
   } catch (err) {
     console.error("❌ Failed to exchange for long-lived token:", err.response?.data || err.message);
