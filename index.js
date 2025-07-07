@@ -70,7 +70,7 @@ function getEmoji(name) {
 }
 
 function formatItemLine(name, qty) {
-  return `╰┈☆ ${stylizeBoldSerif(name)} *${stylizeBoldSerif(qty.toString())} ☆┈╯`;
+  return `╰┈☆ ${getEmoji(name)} ${stylizeBoldSerif(name)} [${stylizeBoldSerif(qty.toString())}] ☆┈╯`;
 }
 
 function summarizeSection(title, icon, section) {
@@ -82,7 +82,7 @@ function summarizeSection(title, icon, section) {
     counts[name] = (counts[name] || 0) + quantity;
   });
   const lines = Object.entries(counts)
-    .map(([name, qty]) => `${getEmoji(name)} ${formatItemLine(name, qty)}`)
+    .map(([name, qty]) => formatItemLine(name, qty))
     .join("\n");
   return `${heading}\n${timer}\n${lines}`;
 }
@@ -100,7 +100,7 @@ function summarizeMerchant(merchant) {
     return `${heading}\n📦 ${stylizeBoldSerif("Coming back in")} ${stylizeBoldSerif(merchant.appearIn)} (~${eta})`;
   }
   const lines = merchant.items.map(({ name, quantity }) =>
-    `${getEmoji(name)} ${formatItemLine(name, quantity)}`
+    formatItemLine(name, quantity)
   ).join("\n");
   return `${heading}\n⏳ ${formatCountdownFancy(merchant.countdown)}\n${lines}`;
 }
@@ -170,8 +170,6 @@ async function checkAndPost() {
       summarizeSection("Egg Collection", "🥚", stock.egg) +
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
       summarizeSection("Cosmetics", "🎨", stock.cosmetics) +
-      `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeSection("Honey Shop", "🍯", stock.honey) +
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
       summarizeMerchant(stock.travelingmerchant) +
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
