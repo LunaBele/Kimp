@@ -16,8 +16,8 @@ const CONFIG = {
   PAGE_ACCESS_TOKEN: process.env.PAGE_ACCESS_TOKEN,
   LONG_PAGE_ACCESS_TOKEN: process.env.LONG_PAGE_ACCESS_TOKEN,
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
-  DEFAULT_CHECK_INTERVAL_MS: 30 * 1000,
-  STOCK_URL: "https://gagstock.gleeze.com/grow-a-garden",
+  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000,
+  MERCHANT_API: "https://gagstock.gleeze.com/grow-a-garden",
   HASH_FILE: "last_stock_hash.txt",
 };
 
@@ -65,26 +65,25 @@ function formatCountdownFancy(str) {
   return `${stylizeBoldSerif(h)}ʜ ${stylizeBoldSerif(m)}ᴍ ${stylizeBoldSerif(s)}ꜱ`;
 }
 
-function getEmoji(name) {
-  return EMOJIS[name] || "🔹";
-}
-
 function formatItemLine(name, qty) {
-  return `╰┈☆ ${getEmoji(name)} ${stylizeBoldSerif(name)} [${stylizeBoldSerif(qty.toString())}] ☆┈╯`;
+  return `╰┈☆ ${stylizeBoldSerif(name)} [${stylizeBoldSerif(qty.toString())}] ☆┈╯`;
 }
 
-function summarizeSection(title, icon, section) {
+function summarizeSection(title, icon, dataArr) {
   const heading = `\n\n${icon} ${stylizeBoldSerif(title)}`;
-  const timer = `⏳ ${formatCountdownFancy(section?.countdown)}`;
-  if (!section?.items?.length) return `${heading}\n${timer}\n${stylizeBoldSerif("Out of stock")}`;
+  if (!dataArr?.length) return `${heading}\n${stylizeBoldSerif("Out of stock")}`;
   const counts = {};
-  section.items.forEach(({ name, quantity }) => {
-    counts[name] = (counts[name] || 0) + quantity;
+  dataArr.forEach(item => {
+    const match = item.match(/^(.*?)\s+\*\*x(\d+)\*\*$/);
+    if (match) {
+      const [, name, qty] = match;
+      counts[name] = (counts[name] || 0) + parseInt(qty, 10);
+    }
   });
   const lines = Object.entries(counts)
     .map(([name, qty]) => formatItemLine(name, qty))
     .join("\n");
-  return `${heading}\n${timer}\n${lines}`;
+  return `${heading}\n${lines}`;
 }
 
 function summarizeMerchant(merchant) {
@@ -117,11 +116,20 @@ function saveHash(file, hash) {
   fs.writeFileSync(file, hash, "utf8");
 }
 
-function cleanStockForHashing(stock) {
-  const clone = JSON.parse(JSON.stringify(stock));
-  delete clone.updated_at;
-  for (const key of Object.keys(clone)) delete clone[key]?.updated_at;
-  return clone;
+async function getStockData() {
+  const [gearRes, seedRes, eggRes, merchantRes] = await Promise.all([
+    axios.get("https://growagardenstock.com/api/stock?type=gear"),
+    axios.get("https://growagardenstock.com/api/stock?type=seeds"),
+    axios.get("https://growagardenstock.com/api/stock?type=egg"),
+    axios.get(CONFIG.MERCHANT_API),
+  ]);
+
+  return {
+    gear: gearRes.data.gear,
+    seed: seedRes.data.seeds,
+    egg: eggRes.data.egg,
+    merchant: merchantRes.data.data.travelingmerchant,
+  };
 }
 
 async function getOrExchangeLongLivedToken() {
@@ -139,8 +147,7 @@ async function getOrExchangeLongLivedToken() {
 
 async function postToFacebook(message) {
   const token = await getOrExchangeLongLivedToken();
-  if (!token) return;
-  if (!fs.existsSync(CONFIG.TEMP_IMAGE_PATH)) return;
+  if (!token || !fs.existsSync(CONFIG.TEMP_IMAGE_PATH)) return;
   const form = new FormData();
   form.append("message", message);
   form.append("access_token", token);
@@ -155,8 +162,8 @@ async function postToFacebook(message) {
 async function checkAndPost() {
   let nextCheck = CONFIG.DEFAULT_CHECK_INTERVAL_MS;
   try {
-    const stock = (await axios.get(CONFIG.STOCK_URL)).data.data;
-    const hash = hashData(cleanStockForHashing(stock));
+    const stock = await getStockData();
+    const hash = hashData(stock);
     const lastHash = loadHash(CONFIG.HASH_FILE);
     if (hash === lastHash) return nextCheck;
 
@@ -169,9 +176,7 @@ async function checkAndPost() {
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
       summarizeSection("Egg Collection", "🥚", stock.egg) +
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeSection("Cosmetics", "🎨", stock.cosmetics) +
-      `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeMerchant(stock.travelingmerchant) +
+      summarizeMerchant(stock.merchant) +
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
       `📅 ${stylizeBoldSerif("Last Update")}: ${stylizeBoldSerif(formatPHTime())}`;
 
@@ -186,11 +191,11 @@ async function checkAndPost() {
 function getDelayToNext5MinutePH() {
   const now = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
   const current = new Date(now);
-  const ms = current.getMilliseconds();
   const seconds = current.getSeconds();
+  const ms = current.getMilliseconds();
   const minutes = current.getMinutes();
-  const minutesToNext = 5 - (minutes % 5);
-  return (minutesToNext * 60 - seconds) * 1000 - ms;
+  const next = 5 - (minutes % 5);
+  return (next * 60 - seconds) * 1000 - ms;
 }
 
 function startAutoPosterEvery5Min() {
