@@ -21,8 +21,6 @@ const CONFIG = {
   HASH_FILE: "last_stock_hash.txt",
 };
 
-const EMOJIS = JSON.parse(fs.readFileSync("emoji.json", "utf8"));
-
 function stylizeBoldSerif(str) {
   const offset = {
     upper: 0x1d5d4 - 65,
@@ -66,7 +64,7 @@ function formatCountdownFancy(str) {
 }
 
 function formatItemLine(name, qty) {
-  return `╰┈☆ ${stylizeBoldSerif(name)} [${stylizeBoldSerif(qty.toString())}] ☆┈╯`;
+  return `╰┈☆  ${stylizeBoldSerif(name)} [${stylizeBoldSerif(qty.toString())}] ☆┈╯`;
 }
 
 function summarizeSection(title, icon, dataArr) {
@@ -156,16 +154,19 @@ async function postToFacebook(message) {
   const res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, {
     headers: form.getHeaders()
   });
-  console.log("✅ Posted to Facebook. Post ID:", res.data.post_id || res.data.id);
+
+  const now = formatPHTime();
+  const url = `https://facebook.com/${res.data.post_id || res.data.id}`;
+  console.log(`✅ Successfully posted at ${now}, ${url}`);
 }
 
 async function checkAndPost() {
-  let nextCheck = CONFIG.DEFAULT_CHECK_INTERVAL_MS;
   try {
+    console.log(`📤 Posting in 5s...`);
     const stock = await getStockData();
     const hash = hashData(stock);
     const lastHash = loadHash(CONFIG.HASH_FILE);
-    if (hash === lastHash) return nextCheck;
+    if (hash === lastHash) return;
 
     const message =
       `${stylizeBoldSerif("🌿✨ Grow-a-Garden Stock Update ✨🌿")}\n` +
@@ -185,7 +186,6 @@ async function checkAndPost() {
   } catch (err) {
     console.error("❌ Error in checkAndPost:", err.message);
   }
-  return nextCheck;
 }
 
 function getDelayToNext5MinutePH() {
@@ -200,10 +200,14 @@ function getDelayToNext5MinutePH() {
 
 function startAutoPosterEvery5Min() {
   const delay = getDelayToNext5MinutePH();
-  console.log(`🕐 First post scheduled in ${Math.ceil(delay / 1000)} seconds.`);
+  const mm = Math.floor(delay / 60000);
+  const ss = Math.floor((delay % 60000) / 1000);
+  const ms = delay % 1000;
+  console.log(`⏭️ Next post scheduled in: ${mm}m ${ss}s ${ms}ms`);
+
   setTimeout(async () => {
     await checkAndPost();
-    setInterval(checkAndPost, 5 * 60 * 1000);
+    setInterval(checkAndPost, CONFIG.DEFAULT_CHECK_INTERVAL_MS);
   }, delay);
 }
 
