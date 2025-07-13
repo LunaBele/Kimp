@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const crypto = require("crypto");
+const WebSocket = require("ws");
 const FormData = require("form-data");
 
 const app = express();
@@ -17,16 +18,37 @@ const CONFIG = {
   LONG_PAGE_ACCESS_TOKEN: process.env.LONG_PAGE_ACCESS_TOKEN,
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
   DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000,
-  MERCHANT_API: "https://gagstock.gleeze.com/grow-a-garden",
   HASH_FILE: "last_stock_hash.txt",
+  WEATHER_API: "https://growagardenstock.com/api/stock/weather"
 };
 
+let latestStock = null;
+
+const sharedWebSocket = new WebSocket("wss://gagstock.gleeze.com");
+
+sharedWebSocket.on("open", () => {
+  console.log("🌐 WebSocket connection established");
+  sharedWebSocket.send(JSON.stringify({ action: "getAllStock" }));
+});
+
+sharedWebSocket.on("message", (data) => {
+  try {
+    const parsed = JSON.parse(data);
+    if (parsed?.status === "success" && parsed?.data) {
+      latestStock = parsed.data;
+      console.log("📦 Stock data received via WebSocket");
+    }
+  } catch (err) {
+    console.error("❌ WebSocket message error:", err.message);
+  }
+});
+
+sharedWebSocket.on("error", (err) => {
+  console.error("❌ WebSocket error:", err.message);
+});
+
 function stylizeBoldSerif(str) {
-  const offset = {
-    upper: 0x1d5d4 - 65,
-    lower: 0x1d5ee - 97,
-    digit: 0x1d7ec - 48,
-  };
+  const offset = { upper: 0x1d5d4 - 65, lower: 0x1d5ee - 97, digit: 0x1d7ec - 48 };
   return str.split("").map(char => {
     if (/[A-Z]/.test(char)) return String.fromCodePoint(char.charCodeAt(0) + offset.upper);
     if (/[a-z]/.test(char)) return String.fromCodePoint(char.charCodeAt(0) + offset.lower);
@@ -47,8 +69,8 @@ function formatPHTime() {
   });
 }
 
-function parseCountdown(countdown) {
-  const match = countdown?.match(/(\d+)h\s+(\d+)m\s+(\d+)s/);
+function parseCountdown(str) {
+  const match = str?.match(/(\d+)h\s+(\d+)m\s+(\d+)s/);
   if (!match) return 0;
   const [, h, m, s] = match.map(Number);
   return (h * 3600 + m * 60 + s) * 1000;
@@ -63,25 +85,17 @@ function formatCountdownFancy(str) {
   return `${stylizeBoldSerif(h)}ʜ ${stylizeBoldSerif(m)}ᴍ ${stylizeBoldSerif(s)}ꜱ`;
 }
 
-function formatItemLine(name, qty) {
-  return `╰┈☆  ${stylizeBoldSerif(name)} [${stylizeBoldSerif(qty.toString())}] ☆┈╯`;
+function formatItemLine(name, qty, emoji = "⭐") {
+  return `╰┈☆ ${emoji} ${stylizeBoldSerif(name)} [${stylizeBoldSerif(qty.toString())}] ☆┈╯`;
 }
 
-function summarizeSection(title, icon, dataArr) {
+function summarizeCategory(title, icon, group) {
   const heading = `\n\n${icon} ${stylizeBoldSerif(title)}`;
-  if (!dataArr?.length) return `${heading}\n${stylizeBoldSerif("Out of stock")}`;
-  const counts = {};
-  dataArr.forEach(item => {
-    const match = item.match(/^(.*?)\s+\*\*x(\d+)\*\*$/);
-    if (match) {
-      const [, name, qty] = match;
-      counts[name] = (counts[name] || 0) + parseInt(qty, 10);
-    }
-  });
-  const lines = Object.entries(counts)
-    .map(([name, qty]) => formatItemLine(name, qty))
-    .join("\n");
-  return `${heading}\n${lines}`;
+  if (!group?.items?.length) return `${heading}\n${stylizeBoldSerif("Out of stock")}`;
+  const summary = group.items.map(item =>
+    formatItemLine(item.name, item.quantity, item.emoji)
+  ).join("\n");
+  return `${heading}\n${formatCountdownFancy(group.countdown)}\n${summary}`;
 }
 
 function summarizeMerchant(merchant) {
@@ -89,17 +103,19 @@ function summarizeMerchant(merchant) {
   if (!merchant || merchant.status === "leaved") {
     if (!merchant?.appearIn) return `${heading}\n${stylizeBoldSerif("Not Available")}`;
     const eta = new Date(Date.now() + parseCountdown(merchant.appearIn)).toLocaleTimeString("en-PH", {
-      timeZone: "Asia/Manila",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
+      timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", hour12: true,
     });
     return `${heading}\n📦 ${stylizeBoldSerif("Coming back in")} ${stylizeBoldSerif(merchant.appearIn)} (~${eta})`;
   }
-  const lines = merchant.items.map(({ name, quantity }) =>
-    formatItemLine(name, quantity)
+  const lines = merchant.items.map(item =>
+    formatItemLine(item.name, item.quantity, item.emoji || "📦")
   ).join("\n");
   return `${heading}\n⏳ ${formatCountdownFancy(merchant.countdown)}\n${lines}`;
+}
+
+function summarizeWeather(weather) {
+  if (!weather?.description) return "";
+  return `\n\n${weather.icon || "🌤️"} ${stylizeBoldSerif("Weather Update")}\n${stylizeBoldSerif(weather.description)}\n${stylizeBoldSerif(weather.cropBonuses || "")}`;
 }
 
 function hashData(data) {
@@ -114,20 +130,28 @@ function saveHash(file, hash) {
   fs.writeFileSync(file, hash, "utf8");
 }
 
-async function getStockData() {
-  const [gearRes, seedRes, eggRes, merchantRes] = await Promise.all([
-    axios.get("https://growagardenstock.com/api/stock?type=gear"),
-    axios.get("https://growagardenstock.com/api/stock?type=seeds"),
-    axios.get("https://growagardenstock.com/api/stock?type=egg"),
-    axios.get(CONFIG.MERCHANT_API),
-  ]);
+async function fetchWeather() {
+  try {
+    const res = await axios.get(CONFIG.WEATHER_API);
+    return res.data;
+  } catch (err) {
+    console.error("⚠️ Failed to fetch weather:", err.message);
+    return null;
+  }
+}
 
-  return {
-    gear: gearRes.data.gear,
-    seed: seedRes.data.seeds,
-    egg: eggRes.data.egg,
-    merchant: merchantRes.data.data.travelingmerchant,
-  };
+async function getStockData() {
+  return new Promise((resolve, reject) => {
+    if (!latestStock) return reject(new Error("Stock data not yet available"));
+    resolve({
+      gear: latestStock.gear,
+      seed: latestStock.seed,
+      egg: latestStock.egg,
+      honey: latestStock.honey,
+      cosmetics: latestStock.cosmetics,
+      merchant: latestStock.travelingmerchant,
+    });
+  });
 }
 
 async function getOrExchangeLongLivedToken() {
@@ -157,27 +181,32 @@ async function postToFacebook(message) {
 
   const now = formatPHTime();
   const url = `https://facebook.com/${res.data.post_id || res.data.id}`;
-  console.log(`✅ Successfully posted at ${now}, ${url}`);
+  console.log(`✅ Posted at ${now}, ${url}`);
 }
 
 async function checkAndPost() {
   try {
-    console.log(`📤 Posting in 5s...`);
-    const stock = await getStockData();
-    const hash = hashData(stock);
+    const [stock, weather] = await Promise.all([getStockData(), fetchWeather()]);
+    const hash = hashData({ stock, weather });
     const lastHash = loadHash(CONFIG.HASH_FILE);
     if (hash === lastHash) return;
 
     const message =
       `${stylizeBoldSerif("🌿✨ Grow-a-Garden Stock Update ✨🌿")}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeSection("Gear Shop", "🛠️", stock.gear) +
+      summarizeCategory("Gear Shop", "🛠️", stock.gear) +
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeSection("Seed Store", "🌱", stock.seed) +
+      summarizeCategory("Seed Store", "🌱", stock.seed) +
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeSection("Egg Collection", "🥚", stock.egg) +
+      summarizeCategory("Egg Collection", "🥚", stock.egg) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      summarizeCategory("Honey Pots", "🍯", stock.honey) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      summarizeCategory("Cosmetics", "🎀", stock.cosmetics) +
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
       summarizeMerchant(stock.merchant) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      summarizeWeather(weather) +
       `\n━━━━━━━━━━━━━━━━━━━━\n` +
       `📅 ${stylizeBoldSerif("Last Update")}: ${stylizeBoldSerif(formatPHTime())}`;
 
@@ -214,6 +243,6 @@ function startAutoPosterEvery5Min() {
 app.use('/doc', express.static(path.join(__dirname, 'public'), { index: 'doc.html' }));
 app.get('/', (req, res) => res.redirect('/doc'));
 app.listen(PORT, () => {
-  console.log(`🌐 Server is listening on port ${PORT}`);
+  console.log(`🌐 Server listening on port ${PORT}`);
   startAutoPosterEvery5Min();
 });
