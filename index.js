@@ -16,36 +16,12 @@ const CONFIG = {
   PAGE_ID: process.env.PAGE_ID,
   PAGE_ACCESS_TOKEN: process.env.PAGE_ACCESS_TOKEN,
   LONG_PAGE_ACCESS_TOKEN: process.env.LONG_PAGE_ACCESS_TOKEN,
+  WS_URL: process.env.WS_URL,
+  WEATHER_API: "https://growagardenstock.com/api/stock/weather",
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
-  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000,
   HASH_FILE: "last_stock_hash.txt",
-  WEATHER_API: "https://growagardenstock.com/api/stock/weather"
+  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000
 };
-
-let latestStock = null;
-
-const sharedWebSocket = new WebSocket("wss://gagstock.gleeze.com");
-
-sharedWebSocket.on("open", () => {
-  console.log("🌐 WebSocket connection established");
-  sharedWebSocket.send(JSON.stringify({ action: "getAllStock" }));
-});
-
-sharedWebSocket.on("message", (data) => {
-  try {
-    const parsed = JSON.parse(data);
-    if (parsed?.status === "success" && parsed?.data) {
-      latestStock = parsed.data;
-      console.log("📦 Stock data received via WebSocket");
-    }
-  } catch (err) {
-    console.error("❌ WebSocket message error:", err.message);
-  }
-});
-
-sharedWebSocket.on("error", (err) => {
-  console.error("❌ WebSocket error:", err.message);
-});
 
 function stylizeBoldSerif(str) {
   const offset = { upper: 0x1d5d4 - 65, lower: 0x1d5ee - 97, digit: 0x1d7ec - 48 };
@@ -69,53 +45,62 @@ function formatPHTime() {
   });
 }
 
-function parseCountdown(str) {
-  const match = str?.match(/(\d+)h\s+(\d+)m\s+(\d+)s/);
-  if (!match) return 0;
-  const [, h, m, s] = match.map(Number);
-  return (h * 3600 + m * 60 + s) * 1000;
+function formatTimeOnlyPH() {
+  return new Date().toLocaleTimeString("en-PH", {
+    timeZone: "Asia/Manila",
+    hour12: true,
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
-function formatCountdownFancy(str) {
-  const ms = parseCountdown(str);
-  if (ms <= 0) return stylizeBoldSerif("Restock Imminent");
-  const h = String(Math.floor(ms / 3600000)).padStart(2, "0");
-  const m = String(Math.floor((ms % 3600000) / 60000)).padStart(2, "0");
-  const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, "0");
-  return `${stylizeBoldSerif(h)}ʜ ${stylizeBoldSerif(m)}ᴍ ${stylizeBoldSerif(s)}ꜱ`;
+function getPHDate() {
+  return new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
 }
 
-function formatItemLine(name, qty, emoji = "⭐") {
-  return `╰┈☆ ${emoji} ${stylizeBoldSerif(name)} [${stylizeBoldSerif(qty.toString())}] ☆┈╯`;
-}
+function getUpdateCountdownMessage() {
+  const now = new Date(getPHDate());
+  const day = now.getDay(); // 6 = Saturday
+  const hour = now.getHours();
+  const min = now.getMinutes();
 
-function summarizeCategory(title, icon, group) {
-  const heading = `\n\n${icon} ${stylizeBoldSerif(title)}`;
-  if (!group?.items?.length) return `${heading}\n${stylizeBoldSerif("Out of stock")}`;
-  const summary = group.items.map(item =>
-    formatItemLine(item.name, item.quantity, item.emoji)
-  ).join("\n");
-  return `${heading}\n${formatCountdownFancy(group.countdown)}\n${summary}`;
-}
+  const targetUpdate = new Date(now);
+  targetUpdate.setHours(22, 0, 0, 0); // 10:00PM
 
-function summarizeMerchant(merchant) {
-  const heading = `\n\n🛒 ${stylizeBoldSerif("Traveling Merchant")}`;
-  if (!merchant || merchant.status === "leaved") {
-    if (!merchant?.appearIn) return `${heading}\n${stylizeBoldSerif("Not Available")}`;
-    const eta = new Date(Date.now() + parseCountdown(merchant.appearIn)).toLocaleTimeString("en-PH", {
-      timeZone: "Asia/Manila", hour: "2-digit", minute: "2-digit", hour12: true,
-    });
-    return `${heading}\n📦 ${stylizeBoldSerif("Coming back in")} ${stylizeBoldSerif(merchant.appearIn)} (~${eta})`;
+  if (day === 6 && hour >= 22) {
+    return stylizeBoldSerif("✅ Update has arrived! Check out what's new!");
   }
-  const lines = merchant.items.map(item =>
-    formatItemLine(item.name, item.quantity, item.emoji || "📦")
-  ).join("\n");
-  return `${heading}\n⏳ ${formatCountdownFancy(merchant.countdown)}\n${lines}`;
+
+  if (day === 6 && hour >= 20) {
+    return stylizeBoldSerif("⚠️ Admins are now playing on the server... Be alert for admin abuse 👀");
+  }
+
+  if (day === 6 && (hour < 22)) {
+    const diff = targetUpdate - now;
+    const h = String(Math.floor(diff / 3600000)).padStart(2, "0");
+    const m = String(Math.floor((diff % 3600000) / 60000)).padStart(2, "0");
+    const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, "0");
+    return `⏳ ${stylizeBoldSerif("Update in")} ${stylizeBoldSerif(h)}h ${stylizeBoldSerif(m)}m ${stylizeBoldSerif(s)}s`;
+  }
+
+  return "";
 }
 
-function summarizeWeather(weather) {
-  if (!weather?.description) return "";
-  return `\n\n${weather.icon || "🌤️"} ${stylizeBoldSerif("Weather Update")}\n${stylizeBoldSerif(weather.description)}\n${stylizeBoldSerif(weather.cropBonuses || "")}`;
+function resetCountdownIfSundayMorning() {
+  const now = new Date(getPHDate());
+  if (now.getDay() === 0 && now.getHours() === 0 && now.getMinutes() < 5) {
+    fs.writeFileSync(CONFIG.HASH_FILE, "", "utf8");
+  }
+}
+
+async function fetchWeather() {
+  try {
+    const res = await axios.get(CONFIG.WEATHER_API);
+    return res.data;
+  } catch (err) {
+    console.error("⚠️ Weather API failed:", err.message);
+    return null;
+  }
 }
 
 function hashData(data) {
@@ -130,28 +115,40 @@ function saveHash(file, hash) {
   fs.writeFileSync(file, hash, "utf8");
 }
 
-async function fetchWeather() {
-  try {
-    const res = await axios.get(CONFIG.WEATHER_API);
-    return res.data;
-  } catch (err) {
-    console.error("⚠️ Failed to fetch weather:", err.message);
-    return null;
-  }
-}
-
 async function getStockData() {
   return new Promise((resolve, reject) => {
-    if (!latestStock) return reject(new Error("Stock data not yet available"));
-    resolve({
-      gear: latestStock.gear,
-      seed: latestStock.seed,
-      egg: latestStock.egg,
-      honey: latestStock.honey,
-      cosmetics: latestStock.cosmetics,
-      merchant: latestStock.travelingmerchant,
+    const ws = new WebSocket(CONFIG.WS_URL);
+    ws.on("open", () => ws.send("getAllStock"));
+    ws.on("message", msg => {
+      try {
+        const json = JSON.parse(msg);
+        resolve(json?.data || {});
+        ws.close();
+      } catch (e) {
+        reject(e);
+      }
     });
+    ws.on("error", reject);
   });
+}
+
+function summarizeSection(title, emoji, group) {
+  if (!group?.items?.length) return "";
+  const lines = group.items.map(x => `${x.emoji || emoji} ${x.name} [${x.quantity}]`).join("\n");
+  return `╭───── 𝗟𝗼𝗮𝗱𝗶𝗻𝗴 ${title} ─────╮\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n╰────────────────╯`;
+}
+
+function summarizeMerchant(merchant) {
+  if (!merchant) return "";
+  if (merchant.status === "leaved") return "╭──── 𝗠𝗘𝗥𝗖𝗛𝗔𝗡𝗧 ────╮\n🛒 Not Available\n╰────────────────╯";
+
+  const items = merchant.items.map(x => `🛒 ${x.name} [${x.quantity}]`).join("\n");
+  return `╭──── 𝗠𝗘𝗥𝗖𝗛𝗔𝗡𝗧 ────╮\n${items}\n⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
+}
+
+function summarizeWeather(weather) {
+  if (!weather?.description) return "";
+  return `☁️ Weather: ${weather.description}\n🌽 Bonus Crop: ${weather.cropBonuses || "None"}`;
 }
 
 async function getOrExchangeLongLivedToken() {
@@ -186,34 +183,31 @@ async function postToFacebook(message) {
 
 async function checkAndPost() {
   try {
+    resetCountdownIfSundayMorning();
+
     const [stock, weather] = await Promise.all([getStockData(), fetchWeather()]);
     const hash = hashData({ stock, weather });
     const lastHash = loadHash(CONFIG.HASH_FILE);
     if (hash === lastHash) return;
 
-    const message =
-      `${stylizeBoldSerif("🌿✨ Grow-a-Garden Stock Update ✨🌿")}\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeCategory("Gear Shop", "🛠️", stock.gear) +
-      `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeCategory("Seed Store", "🌱", stock.seed) +
-      `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeCategory("Egg Collection", "🥚", stock.egg) +
-      `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeCategory("Honey Pots", "🍯", stock.honey) +
-      `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeCategory("Cosmetics", "🎀", stock.cosmetics) +
-      `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeMerchant(stock.merchant) +
-      `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      summarizeWeather(weather) +
-      `\n━━━━━━━━━━━━━━━━━━━━\n` +
-      `📅 ${stylizeBoldSerif("Last Update")}: ${stylizeBoldSerif(formatPHTime())}`;
+    const timeNow = formatTimeOnlyPH();
+    const message = [
+      `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,
+      `🕓 ${formatPHTime()} PH Time`,
+      summarizeSection("GEAR", "🛠️", stock.gear),
+      summarizeSection("SEEDS", "🌱", stock.seed),
+      summarizeSection("EGGS", "🥚", stock.egg),
+      summarizeSection("HONEY", "🍯", stock.honey),
+      summarizeSection("COSMETICS", "🎀", stock.cosmetics),
+      summarizeMerchant(stock.travelingmerchant),
+      summarizeWeather(weather),
+      getUpdateCountdownMessage()
+    ].filter(Boolean).join("\n\n");
 
     await postToFacebook(message);
     saveHash(CONFIG.HASH_FILE, hash);
   } catch (err) {
-    console.error("❌ Error in checkAndPost:", err.message);
+    console.error("❌ Error during post:", err.message);
   }
 }
 
@@ -231,8 +225,7 @@ function startAutoPosterEvery5Min() {
   const delay = getDelayToNext5MinutePH();
   const mm = Math.floor(delay / 60000);
   const ss = Math.floor((delay % 60000) / 1000);
-  const ms = delay % 1000;
-  console.log(`⏭️ Next post scheduled in: ${mm}m ${ss}s ${ms}ms`);
+  console.log(`⏭️ Next post in ${mm}m ${ss}s`);
 
   setTimeout(async () => {
     await checkAndPost();
@@ -240,9 +233,9 @@ function startAutoPosterEvery5Min() {
   }, delay);
 }
 
-app.use('/doc', express.static(path.join(__dirname, 'public'), { index: 'doc.html' }));
-app.get('/', (req, res) => res.redirect('/doc'));
+app.use("/doc", express.static(path.join(__dirname, "public"), { index: "doc.html" }));
+app.get("/", (req, res) => res.redirect("/doc"));
 app.listen(PORT, () => {
-  console.log(`🌐 Server listening on port ${PORT}`);
+  console.log(`🌐 Server running on port ${PORT}`);
   startAutoPosterEvery5Min();
 });
