@@ -20,8 +20,11 @@ const CONFIG = {
   WEATHER_API: "https://growagardenstock.com/api/stock/weather",
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
   HASH_FILE: "last_stock_hash.txt",
-  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000
+  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000 + 2000 // 5 min + 2 sec
 };
+
+const TIPS_PATH = "tips.json";
+const TIPS_CACHE_PATH = "shown_tips.json";
 
 function stylizeBoldSerif(str) {
   const offset = { upper: 0x1d5d4 - 65, lower: 0x1d5ee - 97, digit: 0x1d7ec - 48 };
@@ -58,11 +61,37 @@ function getPHDate() {
   return new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
 }
 
+function getTodayPH() {
+  return new Date().toLocaleDateString("en-PH", { timeZone: "Asia/Manila" });
+}
+
+function getDailyTip() {
+  const tips = JSON.parse(fs.readFileSync(TIPS_PATH, "utf8"));
+  let shown = {};
+  if (fs.existsSync(TIPS_CACHE_PATH)) {
+    shown = JSON.parse(fs.readFileSync(TIPS_CACHE_PATH, "utf8"));
+  }
+
+  const today = getTodayPH();
+  const used = shown[today] || [];
+
+  const available = tips.filter(tip => !used.includes(tip));
+  if (available.length === 0) {
+    shown[today] = [];
+    fs.writeFileSync(TIPS_CACHE_PATH, JSON.stringify(shown, null, 2));
+    return getDailyTip();
+  }
+
+  const selected = available[Math.floor(Math.random() * available.length)];
+  shown[today] = [...used, selected];
+  fs.writeFileSync(TIPS_CACHE_PATH, JSON.stringify(shown, null, 2));
+  return `📌 ${selected}`;
+}
+
 function getUpdateCountdownMessage() {
   const now = new Date(getPHDate());
   const day = now.getDay(); // 6 = Saturday
   const hour = now.getHours();
-  const min = now.getMinutes();
 
   const targetUpdate = new Date(now);
   targetUpdate.setHours(22, 0, 0, 0); // 10:00PM
@@ -75,7 +104,7 @@ function getUpdateCountdownMessage() {
     return stylizeBoldSerif("⚠️ Admins are now playing on the server... Be alert for admin abuse 👀");
   }
 
-  if (day === 6 && (hour < 22)) {
+  if (day === 6 && hour < 22) {
     const diff = targetUpdate - now;
     const h = String(Math.floor(diff / 3600000)).padStart(2, "0");
     const m = String(Math.floor((diff % 3600000) / 60000)).padStart(2, "0");
@@ -141,7 +170,6 @@ function summarizeSection(title, emoji, group) {
 function summarizeMerchant(merchant) {
   if (!merchant) return "";
   if (merchant.status === "leaved") return "╭──── 𝗠𝗘𝗥𝗖𝗛𝗔𝗡𝗧 ────╮\n🛒 Not Available\n╰────────────────╯";
-
   const items = merchant.items.map(x => `🛒 ${x.name} [${x.quantity}]`).join("\n");
   return `╭──── 𝗠𝗘𝗥𝗖𝗛𝗔𝗡𝗧 ────╮\n${items}\n⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
 }
@@ -184,13 +212,11 @@ async function postToFacebook(message) {
 async function checkAndPost() {
   try {
     resetCountdownIfSundayMorning();
-
     const [stock, weather] = await Promise.all([getStockData(), fetchWeather()]);
     const hash = hashData({ stock, weather });
     const lastHash = loadHash(CONFIG.HASH_FILE);
     if (hash === lastHash) return;
 
-    const timeNow = formatTimeOnlyPH();
     const message = [
       `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,
       `🕓 ${formatPHTime()} PH Time`,
@@ -201,7 +227,8 @@ async function checkAndPost() {
       summarizeSection("COSMETICS", "🎀", stock.cosmetics),
       summarizeMerchant(stock.travelingmerchant),
       summarizeWeather(weather),
-      getUpdateCountdownMessage()
+      `╭──── ${stylizeBoldSerif("GAG UPDATE AT //")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`,
+      getDailyTip()
     ].filter(Boolean).join("\n\n");
 
     await postToFacebook(message);
@@ -218,7 +245,7 @@ function getDelayToNext5MinutePH() {
   const ms = current.getMilliseconds();
   const minutes = current.getMinutes();
   const next = 5 - (minutes % 5);
-  return (next * 60 - seconds) * 1000 - ms;
+  return (next * 60 - seconds) * 1000 - ms + 2000;
 }
 
 function startAutoPosterEvery5Min() {
