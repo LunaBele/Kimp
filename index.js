@@ -20,7 +20,7 @@ const CONFIG = {
   WEATHER_API: "https://growagardenstock.com/api/stock/weather",
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
   HASH_FILE: "last_stock_hash.txt",
-  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000 + 2000 // 5 min + 2 sec
+  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000 // exactly 5 minutes
 };
 
 const TIPS_PATH = "tips.json";
@@ -115,6 +115,14 @@ function getUpdateCountdownMessage() {
   return "";
 }
 
+function shouldShowUpdateCountdown() {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const day = now.getDay(); // 5 = Friday, 6 = Saturday
+  const hour = now.getHours();
+
+  return (day === 5 && hour >= 12) || (day === 6 && hour < 12);
+}
+
 function resetCountdownIfSundayMorning() {
   const now = new Date(getPHDate());
   if (now.getDay() === 0 && now.getHours() === 0 && now.getMinutes() < 5) {
@@ -163,8 +171,9 @@ async function getStockData() {
 
 function summarizeSection(title, emoji, group) {
   if (!group?.items?.length) return "";
+  const label = `╭───── 𝗖𝗨𝗥𝗥𝗘𝗡𝗧 ${title.toUpperCase()} 𝗦𝗧𝗢𝗖𝗞 ─────╮`;
   const lines = group.items.map(x => `${x.emoji || emoji} ${x.name} [${x.quantity}]`).join("\n");
-  return `╭───── 𝗟𝗼𝗮𝗱𝗶𝗻𝗴 ${title} ─────╮\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n╰────────────────╯`;
+  return `${label}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n╰────────────────╯`;
 }
 
 function summarizeMerchant(merchant) {
@@ -223,11 +232,13 @@ async function checkAndPost() {
       summarizeSection("GEAR", "🛠️", stock.gear),
       summarizeSection("SEEDS", "🌱", stock.seed),
       summarizeSection("EGGS", "🥚", stock.egg),
-      summarizeSection("HONEY", "🍯", stock.honey),
+      summarizeSection("EVENT SHOP", "🍯", stock.honey),
       summarizeSection("COSMETICS", "🎀", stock.cosmetics),
       summarizeMerchant(stock.travelingmerchant),
       summarizeWeather(weather),
-      `╭──── ${stylizeBoldSerif("GAG UPDATE AT //")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`,
+      shouldShowUpdateCountdown()
+        ? `╭──── ${stylizeBoldSerif("GAG NEXT UPDATE AT")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`
+        : null,
       getDailyTip()
     ].filter(Boolean).join("\n\n");
 
@@ -239,13 +250,13 @@ async function checkAndPost() {
 }
 
 function getDelayToNext5MinutePH() {
-  const now = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
-  const current = new Date(now);
-  const seconds = current.getSeconds();
-  const ms = current.getMilliseconds();
-  const minutes = current.getMinutes();
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const ms = now.getMilliseconds();
+  const seconds = now.getSeconds();
+  const minutes = now.getMinutes();
   const next = 5 - (minutes % 5);
-  return (next * 60 - seconds) * 1000 - ms + 2000;
+  const delayMs = next * 60 * 1000 - seconds * 1000 - ms;
+  return delayMs === 0 ? 5 * 60 * 1000 : delayMs;
 }
 
 function startAutoPosterEvery5Min() {
