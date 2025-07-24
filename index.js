@@ -225,7 +225,13 @@ function getRecommendations(stock) {
     "Medium Toy",
     "Ember Lily",
     "Giant Pinecone",
-    "Burning Bud"
+    "Burning Bud",
+    "Magnifying Glass",
+    "Godly Sprinkler",
+    "Mythical Egg",
+    "Paradise Egg",
+    "Zen Egg",
+    "Bug Egg"
   ];
 
   const allItems = [
