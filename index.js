@@ -233,7 +233,9 @@ function getRecommendations(stock) {
     "Zen Egg",
     "Bug Egg",
     "Bee Egg",
-    "Tranquil Radar"
+    "Tranquil Radar",
+    "Level Up Lollipop",
+    "Friendship Pot"
   ];
 
   const allItems = [
