@@ -231,7 +231,9 @@ function getRecommendations(stock) {
     "Mythical Egg",
     "Paradise Egg",
     "Zen Egg",
-    "Bug Egg"
+    "Bug Egg",
+    "Bee Egg",
+    "Tranquil Radar"
   ];
 
   const allItems = [
