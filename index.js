@@ -90,11 +90,11 @@ function getDailyTip() {
 
 function getUpdateCountdownMessage() {
   const now = new Date(getPHDate());
-  const day = now.getDay(); // 6 = Saturday
+  const day = now.getDay();
   const hour = now.getHours();
 
   const targetUpdate = new Date(now);
-  targetUpdate.setHours(22, 0, 0, 0); // 10:00PM
+  targetUpdate.setHours(22, 0, 0, 0);
 
   if (day === 6 && hour >= 22) {
     return stylizeBoldSerif("✅ Update has arrived! Check out what's new!");
@@ -117,9 +117,8 @@ function getUpdateCountdownMessage() {
 
 function shouldShowUpdateCountdown() {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const day = now.getDay(); // 5 = Friday, 6 = Saturday
+  const day = now.getDay();
   const hour = now.getHours();
-
   return (day === 5 && hour >= 12) || (day === 6 && hour < 12);
 }
 
@@ -218,6 +217,36 @@ async function postToFacebook(message) {
   console.log(`✅ Posted at ${now}, ${url}`);
 }
 
+function getRecommendations(stock) {
+  const wantedItems = [
+    "Master Sprinkler",
+    "Godly Sprinkler",
+    "Medium Treat",
+    "Medium Toy",
+    "Ember Lily",
+    "Giant Pinecone",
+    "Burning Bud"
+  ];
+
+  const allItems = [
+    ...(stock.gear?.items || []),
+    ...(stock.seed?.items || []),
+    ...(stock.egg?.items || []),
+    ...(stock.honey?.items || []),
+    ...(stock.cosmetics?.items || []),
+    ...(stock.travelingmerchant?.items || [])
+  ];
+
+  const inStock = wantedItems.filter(wanted =>
+    allItems.some(item => item.name.toLowerCase() === wanted.toLowerCase())
+  );
+
+  if (!inStock.length) return "";
+
+  const lines = inStock.map(name => `✅ ${name}`);
+  return `💡 ${stylizeBoldSerif("Recommended Buys Today")}:\n` + lines.join("\n");
+}
+
 async function checkAndPost() {
   try {
     resetCountdownIfSundayMorning();
@@ -239,7 +268,8 @@ async function checkAndPost() {
       shouldShowUpdateCountdown()
         ? `╭──── ${stylizeBoldSerif("GAG NEXT UPDATE AT")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`
         : null,
-      getDailyTip()
+      getDailyTip(),
+      getRecommendations(stock) // 👈 Appears only if items are in stock
     ].filter(Boolean).join("\n\n");
 
     await postToFacebook(message);
