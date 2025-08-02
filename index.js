@@ -230,10 +230,10 @@ function getRecommendations(stock) {
     "Godly Sprinkler",
     "Mythical Egg",
     "Paradise Egg",
-    "Zen Egg",
+    "Trading Ticket",
     "Bug Egg",
     "Bee Egg",
-    "Tranquil Radar",
+    "Grand Master Sprinkler",
     "Level Up Lollipop",
     "Friendship Pot"
   ];
