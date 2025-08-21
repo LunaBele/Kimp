@@ -6,7 +6,6 @@ const express = require("express");
 const crypto = require("crypto");
 const WebSocket = require("ws");
 const FormData = require("form-data");
-const chalk = require("chalk");
 const cron = require("node-cron");
 
 const app = express();
@@ -32,15 +31,15 @@ const CONFIG = {
 // --- CONFIG VALIDATION ---
 ["APP_ID", "APP_SECRET", "PAGE_ID", "PAGE_ACCESS_TOKEN", "WS_URL"].forEach(key => {
   if (!CONFIG[key]) {
-    console.error(chalk.red(`❌ Missing config: ${key}`));
+    console.error(`❌ Missing config: ${key}`);
     process.exit(1);
   }
 });
 
 // --- LOGGING HELPERS ---
-function logInfo(msg) { console.log(chalk.green("[INFO]"), msg); }
-function logWarn(msg) { console.warn(chalk.yellow("[WARN]"), msg); }
-function logErr(msg) { console.error(chalk.red("[ERR]"), msg); }
+function logInfo(msg) { console.log(`ℹ️  ${msg}`); }
+function logWarn(msg) { console.warn(`⚠️  ${msg}`); }
+function logErr(msg) { console.error(`❌ ${msg}`); }
 
 // --- UTIL FUNCTIONS ---
 function stylizeBoldSerif(str) {
@@ -106,7 +105,7 @@ async function fetchWeather() {
     const res = await axios.get(CONFIG.WEATHER_API);
     return res.data;
   } catch (err) {
-    logWarn("⚠️ Weather API failed: " + err.message);
+    logWarn("Weather API failed: " + err.message);
     return null;
   }
 }
@@ -200,10 +199,10 @@ async function postToFacebook(message, retries = 3) {
         form,
         { headers: form.getHeaders() }
       );
-      logInfo(`✅ Posted at ${formatPHTime()} https://facebook.com/${res.data.post_id || res.data.id}`);
+      logInfo(`Posted at ${formatPHTime()} https://facebook.com/${res.data.post_id || res.data.id}`);
       return;
     } catch (err) {
-      logWarn(`⚠️ FB post attempt ${i + 1} failed: ${err.message}`);
+      logWarn(`FB post attempt ${i + 1} failed: ${err.message}`);
       if (i === retries - 1) throw err;
       await new Promise(r => setTimeout(r, 2000 * (i + 1)));
     }
@@ -234,7 +233,7 @@ async function checkAndPost() {
     await postToFacebook(message);
     saveHash(CONFIG.HASH_FILE, hash);
   } catch (err) {
-    logErr("❌ Error during post: " + err.message);
+    logErr("Error during post: " + err.message);
   }
 }
 
@@ -245,7 +244,7 @@ cron.schedule("*/5 * * * *", async () => {
 
 // --- AUTO RESTART after 7h ---
 setTimeout(() => {
-  logWarn("♻️ Auto-restarting app after 7h uptime...");
+  logWarn("Auto-restarting app after 7h uptime...");
   process.exit(0); // Render will restart
 }, 7 * 60 * 60 * 1000);
 
@@ -265,5 +264,5 @@ app.post("/trigger", async (req, res) => {
 
 // --- START SERVER ---
 app.listen(PORT, () => {
-  logInfo(`🌐 Server running on port ${PORT}`);
+  logInfo(`Server running on port ${PORT}`);
 });
