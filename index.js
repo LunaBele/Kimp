@@ -266,4 +266,4 @@ app.post("/trigger", async (req, res) => {
 // --- START SERVER ---
 app.listen(PORT, () => {
   logInfo(`🌐 Server running on port ${PORT}`);
-});.
+});
