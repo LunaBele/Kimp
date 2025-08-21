@@ -6,14 +6,9 @@ const express = require("express");
 const crypto = require("crypto");
 const WebSocket = require("ws");
 const FormData = require("form-data");
-const cron = require("node-cron");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// --- CONFIG ---
-const CACHE_DIR = path.join(__dirname, "cache");
-if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR);
 
 const CONFIG = {
   APP_ID: process.env.APP_ID,
@@ -23,25 +18,15 @@ const CONFIG = {
   LONG_PAGE_ACCESS_TOKEN: process.env.LONG_PAGE_ACCESS_TOKEN,
   WS_URL: process.env.WS_URL,
   WEATHER_API: "https://growagardenstock.com/api/stock/weather",
-  TEMP_IMAGE_PATH: path.join(CACHE_DIR, "Temp.png"),
-  HASH_FILE: path.join(CACHE_DIR, "last_stock_hash.txt"),
+  TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
+  HASH_FILE: "last_stock_hash.txt",
   DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000 // exactly 5 minutes
 };
 
-// --- CONFIG VALIDATION ---
-["APP_ID", "APP_SECRET", "PAGE_ID", "PAGE_ACCESS_TOKEN", "WS_URL"].forEach(key => {
-  if (!CONFIG[key]) {
-    console.error(`❌ Missing config: ${key}`);
-    process.exit(1);
-  }
-});
+const TIPS_PATH = "tips.json";
+const TIPS_CACHE_PATH = "shown_tips.json";
 
-// --- LOGGING HELPERS ---
-function logInfo(msg) { console.log(`ℹ️  ${msg}`); }
-function logWarn(msg) { console.warn(`⚠️  ${msg}`); }
-function logErr(msg) { console.error(`❌ ${msg}`); }
-
-// --- UTIL FUNCTIONS ---
+/* ------------------ UTIL FUNCTIONS ------------------ */
 function stylizeBoldSerif(str) {
   const offset = { upper: 0x1d5d4 - 65, lower: 0x1d5ee - 97, digit: 0x1d7ec - 48 };
   return str.split("").map(char => {
@@ -64,6 +49,15 @@ function formatPHTime() {
   });
 }
 
+function formatTimeOnlyPH() {
+  return new Date().toLocaleTimeString("en-PH", {
+    timeZone: "Asia/Manila",
+    hour12: true,
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function getPHDate() {
   return new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
 }
@@ -71,10 +65,6 @@ function getPHDate() {
 function getTodayPH() {
   return new Date().toLocaleDateString("en-PH", { timeZone: "Asia/Manila" });
 }
-
-// --- DAILY TIP ---
-const TIPS_PATH = "tips.json";
-const TIPS_CACHE_PATH = path.join(CACHE_DIR, "shown_tips.json");
 
 function getDailyTip() {
   const tips = JSON.parse(fs.readFileSync(TIPS_PATH, "utf8"));
@@ -99,56 +89,86 @@ function getDailyTip() {
   return `📌 ${selected}`;
 }
 
-// --- STOCK + WEATHER FETCH ---
+function getUpdateCountdownMessage() {
+  const now = new Date(getPHDate());
+  const day = now.getDay();
+  const hour = now.getHours();
+
+  const targetUpdate = new Date(now);
+  targetUpdate.setHours(22, 0, 0, 0);
+
+  if (day === 6 && hour >= 22) {
+    return stylizeBoldSerif("✅ Update has arrived! Check out what's new!");
+  }
+
+  if (day === 6 && hour >= 20) {
+    return stylizeBoldSerif("⚠️ Admins are now playing on the server... Be alert for admin abuse 👀");
+  }
+
+  if (day === 6 && hour < 22) {
+    const diff = targetUpdate - now;
+    const h = String(Math.floor(diff / 3600000)).padStart(2, "0");
+    const m = String(Math.floor((diff % 3600000) / 60000)).padStart(2, "0");
+    const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, "0");
+    return `⏳ ${stylizeBoldSerif("Update in")} ${stylizeBoldSerif(h)}h ${stylizeBoldSerif(m)}m ${stylizeBoldSerif(s)}s`;
+  }
+
+  return "";
+}
+
+function shouldShowUpdateCountdown() {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const day = now.getDay();
+  const hour = now.getHours();
+  return (day === 5 && hour >= 12) || (day === 6 && hour < 12);
+}
+
+function resetCountdownIfSundayMorning() {
+  const now = new Date(getPHDate());
+  if (now.getDay() === 0 && now.getHours() === 0 && now.getMinutes() < 5) {
+    fs.writeFileSync(CONFIG.HASH_FILE, "", "utf8");
+  }
+}
+
 async function fetchWeather() {
   try {
     const res = await axios.get(CONFIG.WEATHER_API);
     return res.data;
   } catch (err) {
-    logWarn("Weather API failed: " + err.message);
+    console.error("⚠️ Weather API failed:", err.message);
     return null;
   }
 }
 
-async function getStockData(timeoutMs = 8000) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(CONFIG.WS_URL);
-    const timer = setTimeout(() => {
-      ws.terminate();
-      reject(new Error("WebSocket request timed out"));
-    }, timeoutMs);
-
-    ws.on("open", () => ws.send("getAllStock"));
-    ws.on("message", msg => {
-      clearTimeout(timer);
-      try {
-        const json = JSON.parse(msg);
-        resolve(json?.data || {});
-      } catch (e) {
-        reject(e);
-      } finally {
-        ws.close();
-      }
-    });
-    ws.on("error", err => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
-}
-
-// --- HASH HELPERS ---
 function hashData(data) {
   return crypto.createHash("sha256").update(JSON.stringify(data)).digest("hex");
 }
+
 function loadHash(file) {
   return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
 }
+
 function saveHash(file, hash) {
   fs.writeFileSync(file, hash, "utf8");
 }
 
-// --- SUMMARIZERS ---
+async function getStockData() {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(CONFIG.WS_URL);
+    ws.on("open", () => ws.send("getAllStock"));
+    ws.on("message", msg => {
+      try {
+        const json = JSON.parse(msg);
+        resolve(json?.data || {});
+        ws.close();
+      } catch (e) {
+        reject(e);
+      }
+    });
+    ws.on("error", reject);
+  });
+}
+
 function summarizeSection(title, emoji, group) {
   if (!group?.items?.length) return "";
   const label = `╭───── 𝗖𝗨𝗥𝗥𝗘𝗡𝗧 ${title.toUpperCase()} 𝗦𝗧𝗢𝗖𝗞 ─────╮`;
@@ -168,7 +188,6 @@ function summarizeWeather(weather) {
   return `☁️ Weather: ${weather.description}\n🌽 Bonus Crop: ${weather.cropBonuses || "None"}`;
 }
 
-// --- FACEBOOK POSTER ---
 async function getOrExchangeLongLivedToken() {
   if (CONFIG.LONG_PAGE_ACCESS_TOKEN) return CONFIG.LONG_PAGE_ACCESS_TOKEN;
   const url = `https://graph.facebook.com/oauth/access_token`;
@@ -182,87 +201,132 @@ async function getOrExchangeLongLivedToken() {
   return res.data.access_token;
 }
 
-async function postToFacebook(message, retries = 3) {
+async function postToFacebook(message) {
   const token = await getOrExchangeLongLivedToken();
   if (!token || !fs.existsSync(CONFIG.TEMP_IMAGE_PATH)) return;
-
   const form = new FormData();
   form.append("message", message);
   form.append("access_token", token);
   form.append("published", "true");
   form.append("source", fs.createReadStream(CONFIG.TEMP_IMAGE_PATH));
+  const res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, {
+    headers: form.getHeaders()
+  });
 
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await axios.post(
-        `https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`,
-        form,
-        { headers: form.getHeaders() }
-      );
-      logInfo(`Posted at ${formatPHTime()} https://facebook.com/${res.data.post_id || res.data.id}`);
-      return;
-    } catch (err) {
-      logWarn(`FB post attempt ${i + 1} failed: ${err.message}`);
-      if (i === retries - 1) throw err;
-      await new Promise(r => setTimeout(r, 2000 * (i + 1)));
-    }
-  }
+  const now = formatPHTime();
+  const url = `https://facebook.com/${res.data.post_id || res.data.id}`;
+  console.log(`✅ Posted at ${now}, ${url}`);
 }
 
-// --- MAIN POSTING LOGIC ---
+function getRecommendations(stock) {
+  const wantedItems = [
+    "Master Sprinkler",
+    "Godly Sprinkler",
+    "Medium Treat",
+    "Medium Toy",
+    "Ember Lily",
+    "Giant Pinecone",
+    "Burning Bud",
+    "Magnifying Glass",
+    "Godly Sprinkler",
+    "Mythical Egg",
+    "Paradise Egg",
+    "Trading Ticket",
+    "Bug Egg",
+    "Bee Egg",
+    "Grand Master Sprinkler",
+    "Level Up Lollipop",
+    "Friendship Pot"
+  ];
+
+  const allItems = [
+    ...(stock.gear?.items || []),
+    ...(stock.seed?.items || []),
+    ...(stock.egg?.items || []),
+    ...(stock.honey?.items || []),
+    ...(stock.cosmetics?.items || []),
+    ...(stock.travelingmerchant?.items || [])
+  ];
+
+  const inStock = wantedItems.filter(wanted =>
+    allItems.some(item => item.name.toLowerCase() === wanted.toLowerCase())
+  );
+
+  if (!inStock.length) return "";
+
+  const lines = inStock.map(name => `✅ ${name}`);
+  return `💡 ${stylizeBoldSerif("Recommended Buys Today")}:\n` + lines.join("\n");
+}
+
 async function checkAndPost() {
   try {
+    resetCountdownIfSundayMorning();
     const [stock, weather] = await Promise.all([getStockData(), fetchWeather()]);
     const hash = hashData({ stock, weather });
     const lastHash = loadHash(CONFIG.HASH_FILE);
     if (hash === lastHash) return;
 
-    const message = [
-      `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,
-      `🕓 ${formatPHTime()} PH Time`,
-      summarizeSection("GEAR", "🛠️", stock.gear),
-      summarizeSection("SEEDS", "🌱", stock.seed),
-      summarizeSection("EGGS", "🥚", stock.egg),
-      summarizeSection("EVENT SHOP", "🍯", stock.honey),
-      summarizeSection("COSMETICS", "🎀", stock.cosmetics),
-      summarizeMerchant(stock.travelingmerchant),
-      summarizeWeather(weather),
-      getDailyTip()
-    ].filter(Boolean).join("\n\n");
+    const message = [  
+      `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,  
+      `🕓 ${formatPHTime()} PH Time`,  
+      summarizeSection("GEAR", "🛠️", stock.gear),  
+      summarizeSection("SEEDS", "🌱", stock.seed),  
+      summarizeSection("EGGS", "🥚", stock.egg),  
+      summarizeSection("EVENT SHOP", "🍯", stock.honey),  
+      summarizeSection("COSMETICS", "🎀", stock.cosmetics),  
+      summarizeMerchant(stock.travelingmerchant),  
+      summarizeWeather(weather),  
+      shouldShowUpdateCountdown()  
+        ? `╭──── ${stylizeBoldSerif("GAG NEXT UPDATE AT")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`  
+        : null,  
+      getDailyTip(),  
+      getRecommendations(stock)  
+    ].filter(Boolean).join("\n\n");  
 
-    await postToFacebook(message);
+    await postToFacebook(message);  
     saveHash(CONFIG.HASH_FILE, hash);
+
   } catch (err) {
-    logErr("Error during post: " + err.message);
+    console.error("❌ Error during post:", err.message);
   }
 }
 
-// --- CRON JOB (every 5 min) ---
-cron.schedule("*/5 * * * *", async () => {
-  await checkAndPost();
-}, { timezone: "Asia/Manila" });
+function getDelayToNext5MinutePH() {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const ms = now.getMilliseconds();
+  const seconds = now.getSeconds();
+  const minutes = now.getMinutes();
+  const next = 5 - (minutes % 5);
+  const delayMs = next * 60 * 1000 - seconds * 1000 - ms;
+  return delayMs === 0 ? 5 * 60 * 1000 : delayMs;
+}
 
-// --- AUTO RESTART after 7h ---
-setTimeout(() => {
-  logWarn("Auto-restarting app after 7h uptime...");
-  process.exit(0); // Render will restart
-}, 7 * 60 * 60 * 1000);
+function startAutoPosterEvery5Min() {
+  const delay = getDelayToNext5MinutePH();
+  const mm = Math.floor(delay / 60000);
+  const ss = Math.floor((delay % 60000) / 1000);
+  console.log(`⏭️ Next post in ${mm}m ${ss}s`);
 
-// --- EXPRESS ROUTES ---
+  setTimeout(async () => {
+    await checkAndPost();
+    setInterval(checkAndPost, CONFIG.DEFAULT_CHECK_INTERVAL_MS);
+  }, delay);
+}
+
+/* 🔄 Auto-refresh app after 24 hours */
+function scheduleDailyRestart() {
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  setTimeout(() => {
+    console.log("♻️ Restarting app to refresh environment (Render will auto-restart)...");
+    process.exit(0);
+  }, ONE_DAY);
+}
+
+/* ------------------ EXPRESS ------------------ */
 app.use("/doc", express.static(path.join(__dirname, "public"), { index: "doc.html" }));
 app.get("/", (req, res) => res.redirect("/doc"));
-
-app.get("/health", (req, res) => res.json({ status: "ok", time: formatPHTime() }));
-app.post("/trigger", async (req, res) => {
-  try {
-    await checkAndPost();
-    res.send("✅ Manual post triggered");
-  } catch (err) {
-    res.status(500).send("❌ Failed: " + err.message);
-  }
-});
-
-// --- START SERVER ---
 app.listen(PORT, () => {
-  logInfo(`Server running on port ${PORT}`);
+  console.log(`🌐 Server running on port ${PORT}`);
+  startAutoPosterEvery5Min();
+  scheduleDailyRestart(); // 👈 Added this
 });
