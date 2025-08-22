@@ -19,8 +19,9 @@ const CONFIG = {
   WS_URL: process.env.WS_URL,
   WEATHER_API: "https://growagardenstock.com/api/stock/weather",
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
+  TEMP_VIDEO_PATH: path.join("cache", "Temp.mp4"),
   HASH_FILE: "last_stock_hash.txt",
-  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000 // exactly 5 minutes
+  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000 // 5 minutes
 };
 
 const TIPS_PATH = "tips.json";
@@ -188,7 +189,7 @@ function getEmojiForCat(cat) {
 
 function summarizeSection(title, emoji, group) {
   if (!group?.items?.length) return "";
-  const label = `╭───── CURRENT ${title.toUpperCase()} STOCK ─────╮`; // Normal font, bold effect via uppercase
+  const label = `╭───── CURRENT ${title.toUpperCase()} STOCK ─────╮`;
   const lines = group.items.map(x => `${x.emoji || emoji} ${x.name} [${x.quantity}]`).join("\n");
   return `${label}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n╰────────────────╯`;
 }
@@ -207,17 +208,15 @@ function summarizeWeather(weather) {
 
 function summarizePredictions(predictions) {
   if (!predictions) return "";
-
   const warning = `⚠️ ${stylizeBoldSerif("Predictions are in BETA and not fully tested. Use with caution!")}\n`;
   const cats = ["seed", "gear", "egg"];
   const lines = [];
   for (const cat of cats) {
     if (!predictions[cat] || !Array.isArray(predictions[cat]) || predictions[cat].length === 0) continue;
-    const label = `╭───── UPCOMING ${cat.toUpperCase()} ─────╮`; // Normal font, bold effect via uppercase
+    const label = `╭───── UPCOMING ${cat.toUpperCase()} ─────╮`;
     const items = predictions[cat].map(item => `${getEmojiForCat(cat)} ${item.name}: ${item.showTime || "Unknown"}`).join("\n");
     lines.push(`${label}\n${items}\n╰────────────────╯`);
   }
-
   if (lines.length === 0) return "";
   return `${warning}${lines.join("\n")}`;
 }
@@ -235,17 +234,40 @@ async function getOrExchangeLongLivedToken() {
   return res.data.access_token;
 }
 
+/* ✅ Updated: Supports Temp.png & Temp.mp4 */
 async function postToFacebook(message) {
   const token = await getOrExchangeLongLivedToken();
-  if (!token || !fs.existsSync(CONFIG.TEMP_IMAGE_PATH)) return;
-  const form = new FormData();
-  form.append("message", message);
-  form.append("access_token", token);
-  form.append("published", "true");
-  form.append("source", fs.createReadStream(CONFIG.TEMP_IMAGE_PATH));
-  const res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, {
-    headers: form.getHeaders()
-  });
+  if (!token) return;
+
+  const hasImage = fs.existsSync(CONFIG.TEMP_IMAGE_PATH);
+  const hasVideo = fs.existsSync(CONFIG.TEMP_VIDEO_PATH);
+
+  if (!hasImage && !hasVideo) {
+    console.log("⚠️ No Temp.png or Temp.mp4 found, skipping post.");
+    return;
+  }
+
+  let res;
+  if (hasVideo) {
+    const form = new FormData();
+    form.append("description", message);
+    form.append("access_token", token);
+    form.append("source", fs.createReadStream(CONFIG.TEMP_VIDEO_PATH));
+
+    res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/videos`, form, {
+      headers: form.getHeaders()
+    });
+  } else if (hasImage) {
+    const form = new FormData();
+    form.append("message", message);
+    form.append("access_token", token);
+    form.append("published", "true");
+    form.append("source", fs.createReadStream(CONFIG.TEMP_IMAGE_PATH));
+
+    res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, {
+      headers: form.getHeaders()
+    });
+  }
 
   const now = formatPHTime();
   const url = `https://facebook.com/${res.data.post_id || res.data.id}`;
@@ -287,7 +309,6 @@ function getRecommendations(stock) {
   );
 
   if (!inStock.length) return "";
-
   const lines = inStock.map(name => `✅ ${name}`);
   return `💡 ${stylizeBoldSerif("Recommended Buys Today")}:\n` + lines.join("\n");
 }
@@ -320,7 +341,6 @@ async function checkAndPost() {
 
     await postToFacebook(message);  
     saveHash(CONFIG.HASH_FILE, hash);
-
   } catch (err) {
     console.error("❌ Error during post:", err.message);
   }
