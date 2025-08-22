@@ -120,7 +120,7 @@ function shouldShowUpdateCountdown() {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const day = now.getDay();
   const hour = now.getHours();
-  return (day === 5 && hour >= 12) || (day === 6 && hour < 12);
+  return (day === 5 && hour >= 12) || (day === 6 && hour < 22);
 }
 
 function resetCountdownIfSundayMorning() {
@@ -188,16 +188,16 @@ function getEmojiForCat(cat) {
 
 function summarizeSection(title, emoji, group) {
   if (!group?.items?.length) return "";
-  const label = `╭───── 𝗖𝗨𝗥𝗥𝗘𝗡𝗧 ${title.toUpperCase()} 𝗦𝗧𝗢𝗖�_K ─────╮`;
+  const label = `╭───── CURRENT ${title.toUpperCase()} STOCK ─────╮`; // Normal font, bold effect via uppercase
   const lines = group.items.map(x => `${x.emoji || emoji} ${x.name} [${x.quantity}]`).join("\n");
   return `${label}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n╰────────────────╯`;
 }
 
 function summarizeMerchant(merchant) {
   if (!merchant) return "";
-  if (merchant.status === "leaved") return "╭──── 𝗠𝗘𝗥𝗖𝗛𝗔𝗡𝗧 ────╮\n🛒 Not Available\n╰────────────────╯";
+  if (merchant.status === "leaved") return "╭──── MERCHANT ────╮\n🛒 Not Available\n╰────────────────╯";
   const items = merchant.items.map(x => `🛒 ${x.name} [${x.quantity}]`).join("\n");
-  return `╭──── �_M𝗘𝗥𝗖𝗛𝗔𝗡𝗧 ────╮\n${items}\n⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
+  return `╭──── MERCHANT ────╮\n${items}\n⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
 }
 
 function summarizeWeather(weather) {
@@ -213,7 +213,7 @@ function summarizePredictions(predictions) {
   const lines = [];
   for (const cat of cats) {
     if (!predictions[cat] || !Array.isArray(predictions[cat]) || predictions[cat].length === 0) continue;
-    const label = `╭───── 𝗨𝗣𝗖𝗢�_M𝗜𝗡𝗚 ${cat.toUpperCase()} ─────╮`;
+    const label = `╭───── UPCOMING ${cat.toUpperCase()} ─────╮`; // Normal font, bold effect via uppercase
     const items = predictions[cat].map(item => `${getEmojiForCat(cat)} ${item.name}: ${item.showTime || "Unknown"}`).join("\n");
     lines.push(`${label}\n${items}\n╰────────────────╯`);
   }
