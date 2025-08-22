@@ -140,6 +140,16 @@ async function fetchWeather() {
   }
 }
 
+async function fetchPredictions() {
+  try {
+    const res = await axios.get("https://gagstock.gleeze.com/predict", { params: { q: "seed|gear|egg" } });
+    if (res.data.status === "success" && res.data.data) return res.data.data;
+  } catch (err) {
+    console.error("⚠️ Predictions API failed:", err.message);
+  }
+  return null;
+}
+
 function hashData(data) {
   return crypto.createHash("sha256").update(JSON.stringify(data)).digest("hex");
 }
@@ -169,9 +179,16 @@ async function getStockData() {
   });
 }
 
+function getEmojiForCat(cat) {
+  if (cat === "seed") return "🌱";
+  if (cat === "gear") return "🛠️";
+  if (cat === "egg") return "🥚";
+  return "";
+}
+
 function summarizeSection(title, emoji, group) {
   if (!group?.items?.length) return "";
-  const label = `╭───── 𝗖𝗨𝗥𝗥𝗘𝗡𝗧 ${title.toUpperCase()} 𝗦𝗧𝗢𝗖𝗞 ─────╮`;
+  const label = `╭───── 𝗖𝗨𝗥𝗥𝗘𝗡𝗧 ${title.toUpperCase()} 𝗦𝗧𝗢𝗖�_K ─────╮`;
   const lines = group.items.map(x => `${x.emoji || emoji} ${x.name} [${x.quantity}]`).join("\n");
   return `${label}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n╰────────────────╯`;
 }
@@ -180,12 +197,29 @@ function summarizeMerchant(merchant) {
   if (!merchant) return "";
   if (merchant.status === "leaved") return "╭──── 𝗠𝗘𝗥𝗖𝗛𝗔𝗡𝗧 ────╮\n🛒 Not Available\n╰────────────────╯";
   const items = merchant.items.map(x => `🛒 ${x.name} [${x.quantity}]`).join("\n");
-  return `╭──── 𝗠𝗘𝗥𝗖𝗛𝗔𝗡𝗧 ────╮\n${items}\n⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
+  return `╭──── �_M𝗘𝗥𝗖𝗛𝗔𝗡𝗧 ────╮\n${items}\n⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
 }
 
 function summarizeWeather(weather) {
   if (!weather?.description) return "";
   return `☁️ Weather: ${weather.description}\n🌽 Bonus Crop: ${weather.cropBonuses || "None"}`;
+}
+
+function summarizePredictions(predictions) {
+  if (!predictions) return "";
+
+  const warning = `⚠️ ${stylizeBoldSerif("Predictions are in BETA and not fully tested. Use with caution!")}\n`;
+  const cats = ["seed", "gear", "egg"];
+  const lines = [];
+  for (const cat of cats) {
+    if (!predictions[cat] || !Array.isArray(predictions[cat]) || predictions[cat].length === 0) continue;
+    const label = `╭───── 𝗨𝗣𝗖𝗢�_M𝗜𝗡𝗚 ${cat.toUpperCase()} ─────╮`;
+    const items = predictions[cat].map(item => `${getEmojiForCat(cat)} ${item.name}: ${item.showTime || "Unknown"}`).join("\n");
+    lines.push(`${label}\n${items}\n╰────────────────╯`);
+  }
+
+  if (lines.length === 0) return "";
+  return `${warning}${lines.join("\n")}`;
 }
 
 async function getOrExchangeLongLivedToken() {
@@ -261,8 +295,8 @@ function getRecommendations(stock) {
 async function checkAndPost() {
   try {
     resetCountdownIfSundayMorning();
-    const [stock, weather] = await Promise.all([getStockData(), fetchWeather()]);
-    const hash = hashData({ stock, weather });
+    const [stock, weather, predictions] = await Promise.all([getStockData(), fetchWeather(), fetchPredictions()]);
+    const hash = hashData({ stock, weather, predictions });
     const lastHash = loadHash(CONFIG.HASH_FILE);
     if (hash === lastHash) return;
 
@@ -272,6 +306,7 @@ async function checkAndPost() {
       summarizeSection("GEAR", "🛠️", stock.gear),  
       summarizeSection("SEEDS", "🌱", stock.seed),  
       summarizeSection("EGGS", "🥚", stock.egg),  
+      summarizePredictions(predictions),
       summarizeSection("EVENT SHOP", "🍯", stock.honey),  
       summarizeSection("COSMETICS", "🎀", stock.cosmetics),  
       summarizeMerchant(stock.travelingmerchant),  
@@ -328,5 +363,5 @@ app.get("/", (req, res) => res.redirect("/doc"));
 app.listen(PORT, () => {
   console.log(`🌐 Server running on port ${PORT}`);
   startAutoPosterEvery5Min();
-  scheduleDailyRestart(); // 👈 Added this
+  scheduleDailyRestart();
 });
