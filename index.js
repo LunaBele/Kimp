@@ -292,7 +292,8 @@ function getRecommendations(stock) {
     "Bee Egg",
     "Grand Master Sprinkler",
     "Level Up Lollipop",
-    "Friendship Pot"
+    "Friendship Pot",
+    "Sprout Egg"
   ];
 
   const allItems = [
@@ -323,7 +324,7 @@ async function checkAndPost() {
 
     const message = [  
       `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,  
-      `📦 ${stylizeBoldSerif("Version: 1.0.0")} //`,  
+      `📦 ${stylizeBoldSerif("Version: 1.0.1")} //`,  
       `🕓 ${formatPHTime()} PH Time`,  
       summarizeSection("GEAR", "🛠️", stock.gear),  
       summarizeSection("SEEDS", "🌱", stock.seed),  
