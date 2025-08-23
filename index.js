@@ -323,6 +323,7 @@ async function checkAndPost() {
 
     const message = [  
       `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,  
+      `📦 ${stylizeBoldSerif("Version: 1.0.0")} //`,  
       `🕓 ${formatPHTime()} PH Time`,  
       summarizeSection("GEAR", "🛠️", stock.gear),  
       summarizeSection("SEEDS", "🌱", stock.seed),  
@@ -368,20 +369,10 @@ function startAutoPosterEvery5Min() {
   }, delay);
 }
 
-/* 🔄 Auto-refresh app after 24 hours */
-function scheduleDailyRestart() {
-  const ONE_DAY = 24 * 60 * 60 * 1000;
-  setTimeout(() => {
-    console.log("♻️ Restarting app to refresh environment (Render will auto-restart)...");
-    process.exit(0);
-  }, ONE_DAY);
-}
-
 /* ------------------ EXPRESS ------------------ */
 app.use("/doc", express.static(path.join(__dirname, "public"), { index: "doc.html" }));
 app.get("/", (req, res) => res.redirect("/doc"));
 app.listen(PORT, () => {
   console.log(`🌐 Server running on port ${PORT}`);
   startAutoPosterEvery5Min();
-  scheduleDailyRestart();
 });
