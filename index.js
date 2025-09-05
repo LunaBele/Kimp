@@ -21,7 +21,9 @@ const CONFIG = {
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
   TEMP_VIDEO_PATH: path.join("cache", "Temp.mp4"),
   HASH_FILE: "last_stock_hash.txt",
-  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000 // 5 minutes
+  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
+  UPDATE_DAY: 6, // Saturday (0=Sunday, 6=Saturday)
+  UPDATE_HOUR: 22, // 10 PM
 };
 
 const TIPS_PATH = "tips.json";
@@ -47,15 +49,6 @@ function formatPHTime() {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  });
-}
-
-function formatTimeOnlyPH() {
-  return new Date().toLocaleTimeString("en-PH", {
-    timeZone: "Asia/Manila",
-    hour12: true,
-    hour: "2-digit",
-    minute: "2-digit"
   });
 }
 
@@ -90,38 +83,53 @@ function getDailyTip() {
   return `📌 ${selected}`;
 }
 
+function formatTimeDifference(ms) {
+  const h = String(Math.floor(ms / 3600000)).padStart(2, "0");
+  const m = String(Math.floor((ms % 3600000) / 60000)).padStart(2, "0");
+  const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, "0");
+  return `${h}h ${m}m ${s}s`;
+}
+
 function getUpdateCountdownMessage() {
   const now = new Date(getPHDate());
   const day = now.getDay();
   const hour = now.getHours();
+  const minutes = now.getMinutes();
 
   const targetUpdate = new Date(now);
-  targetUpdate.setHours(22, 0, 0, 0);
+  targetUpdate.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
 
-  if (day === 6 && hour >= 22) {
-    return stylizeBoldSerif("✅ Update has arrived! Check out what's new!");
+  if (day === CONFIG.UPDATE_DAY) {
+    if (hour >= CONFIG.UPDATE_HOUR) {
+      // Update has passed for the day, show countdown to next week's update
+      const nextUpdate = new Date(now);
+      nextUpdate.setDate(now.getDate() + 7 - now.getDay() + CONFIG.UPDATE_DAY);
+      nextUpdate.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
+      const diff = nextUpdate - now;
+      return `⏳ ${stylizeBoldSerif("Next update check in")} ${formatTimeDifference(diff)}`;
+    } else if (hour >= 20) {
+      // Admin alert before the update
+      return stylizeBoldSerif("⚠️ Admins are now playing on the server... Be alert for admin abuse 👀");
+    } else {
+      // Countdown to this week's update
+      const diff = targetUpdate - now;
+      return `⏳ ${stylizeBoldSerif("Update in")} ${formatTimeDifference(diff)}`;
+    }
   }
 
-  if (day === 6 && hour >= 20) {
-    return stylizeBoldSerif("⚠️ Admins are now playing on the server... Be alert for admin abuse 👀");
-  }
-
-  if (day === 6 && hour < 22) {
-    const diff = targetUpdate - now;
-    const h = String(Math.floor(diff / 3600000)).padStart(2, "0");
-    const m = String(Math.floor((diff % 3600000) / 60000)).padStart(2, "0");
-    const s = String(Math.floor((diff % 60000) / 1000)).padStart(2, "0");
-    return `⏳ ${stylizeBoldSerif("Update in")} ${stylizeBoldSerif(h)}h ${stylizeBoldSerif(m)}m ${stylizeBoldSerif(s)}s`;
-  }
-
-  return "";
+  // Countdown to next week's update
+  const nextUpdate = new Date(now);
+  nextUpdate.setDate(now.getDate() + 7 - now.getDay() + CONFIG.UPDATE_DAY);
+  nextUpdate.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
+  const diff = nextUpdate - now;
+  return `⏳ ${stylizeBoldSerif("Next update check in")} ${formatTimeDifference(diff)}`;
 }
 
 function shouldShowUpdateCountdown() {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const day = now.getDay();
   const hour = now.getHours();
-  return (day === 5 && hour >= 12) || (day === 6 && hour < 22);
+  return (day === 5 && hour >= 12) || (day === 6 && hour < 22) || (day > 6 || day < 5);
 }
 
 function resetCountdownIfSundayMorning() {
@@ -139,16 +147,6 @@ async function fetchWeather() {
     console.error("⚠️ Weather API failed:", err.message);
     return null;
   }
-}
-
-async function fetchPredictions() {
-  try {
-    const res = await axios.get("https://gagstock.gleeze.com/predict", { params: { q: "seed|gear|egg" } });
-    if (res.data.status === "success" && res.data.data) return res.data.data;
-  } catch (err) {
-    console.error("⚠️ Predictions API failed:", err.message);
-  }
-  return null;
 }
 
 function hashData(data) {
@@ -180,101 +178,39 @@ async function getStockData() {
   });
 }
 
-function getEmojiForCat(cat) {
-  if (cat === "seed") return "🌱";
-  if (cat === "gear") return "🛠️";
-  if (cat === "egg") return "🥚";
-  return "";
-}
-
-function summarizeSection(title, emoji, group) {
+function stylizeSection(title, emoji, group) {
   if (!group?.items?.length) return "";
-  const label = `╭───── CURRENT ${title.toUpperCase()} STOCK ─────╮`;
+  const header = `╭───── ${stylizeBoldSerif(title.toUpperCase())} STOCK ─────╮`;
   const lines = group.items.map(x => `${x.emoji || emoji} ${x.name} [${x.quantity}]`).join("\n");
-  return `${label}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n╰────────────────╯`;
+  const footer = `╰──────────────────────╯`;
+  return `${header}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n${footer}`;
 }
 
-function summarizeMerchant(merchant) {
+function stylizeMerchant(merchant) {
   if (!merchant) return "";
-  if (merchant.status === "leaved") return "╭──── MERCHANT ────╮\n🛒 Not Available\n╰────────────────╯";
+  const header = `╭──── ${stylizeBoldSerif("MERCHANT")} ────╮`;
+  if (merchant.status === "leaved") return `${header}\n🛒 Not Available\n╰────────────────╯`;
   const items = merchant.items.map(x => `🛒 ${x.name} [${x.quantity}]`).join("\n");
-  return `╭──── MERCHANT ────╮\n${items}\n⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
+  const footer = `⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
+  return `${header}\n${items}\n${footer}`;
 }
 
-function summarizeWeather(weather) {
+function stylizeWeather(weather) {
   if (!weather?.description) return "";
-  return `☁️ Weather: ${weather.description}\n🌽 Bonus Crop: ${weather.cropBonuses || "None"}`;
+  const header = `╭───── ${stylizeBoldSerif("WEATHER")} ─────╮`;
+  const lines = `☁️ Weather: ${weather.description}\n🌽 Bonus Crop: ${weather.cropBonuses || "None"}`;
+  const footer = `╰───────────────────╯`;
+  return `${header}\n${lines}\n${footer}`;
 }
 
-function summarizePredictions(predictions) {
-  if (!predictions) return "";
-  const warning = `⚠️ ${stylizeBoldSerif("Predictions are in BETA and not fully tested. Use with caution!")}\n`;
-  const cats = ["seed", "gear", "egg"];
-  const lines = [];
-  for (const cat of cats) {
-    if (!predictions[cat] || !Array.isArray(predictions[cat]) || predictions[cat].length === 0) continue;
-    const label = `╭───── UPCOMING ${cat.toUpperCase()} ─────╮`;
-    const items = predictions[cat].map(item => `${getEmojiForCat(cat)} ${item.name}: ${item.showTime || "Unknown"}`).join("\n");
-    lines.push(`${label}\n${items}\n╰────────────────╯`);
-  }
-  if (lines.length === 0) return "";
-  return `${warning}${lines.join("\n")}`;
+function stylizeTip(tip) {
+  if (!tip) return "";
+  const header = `╭───── ${stylizeBoldSerif("DAILY TIP")} ─────╮`;
+  const footer = `╰──────────────────────╯`;
+  return `${header}\n${tip}\n${footer}`;
 }
 
-async function getOrExchangeLongLivedToken() {
-  if (CONFIG.LONG_PAGE_ACCESS_TOKEN) return CONFIG.LONG_PAGE_ACCESS_TOKEN;
-  const url = `https://graph.facebook.com/oauth/access_token`;
-  const params = {
-    grant_type: "fb_exchange_token",
-    client_id: CONFIG.APP_ID,
-    client_secret: CONFIG.APP_SECRET,
-    fb_exchange_token: CONFIG.PAGE_ACCESS_TOKEN,
-  };
-  const res = await axios.get(url, { params });
-  return res.data.access_token;
-}
-
-/* ✅ Updated: Supports Temp.png & Temp.mp4 */
-async function postToFacebook(message) {
-  const token = await getOrExchangeLongLivedToken();
-  if (!token) return;
-
-  const hasImage = fs.existsSync(CONFIG.TEMP_IMAGE_PATH);
-  const hasVideo = fs.existsSync(CONFIG.TEMP_VIDEO_PATH);
-
-  if (!hasImage && !hasVideo) {
-    console.log("⚠️ No Temp.png or Temp.mp4 found, skipping post.");
-    return;
-  }
-
-  let res;
-  if (hasVideo) {
-    const form = new FormData();
-    form.append("description", message);
-    form.append("access_token", token);
-    form.append("source", fs.createReadStream(CONFIG.TEMP_VIDEO_PATH));
-
-    res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/videos`, form, {
-      headers: form.getHeaders()
-    });
-  } else if (hasImage) {
-    const form = new FormData();
-    form.append("message", message);
-    form.append("access_token", token);
-    form.append("published", "true");
-    form.append("source", fs.createReadStream(CONFIG.TEMP_IMAGE_PATH));
-
-    res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, {
-      headers: form.getHeaders()
-    });
-  }
-
-  const now = formatPHTime();
-  const url = `https://facebook.com/${res.data.post_id || res.data.id}`;
-  console.log(`✅ Posted at ${now}, ${url}`);
-}
-
-function getRecommendations(stock) {
+function stylizeRecommendations(stock) {
   const wantedItems = [
     "Master Sprinkler",
     "Godly Sprinkler",
@@ -284,7 +220,6 @@ function getRecommendations(stock) {
     "Giant Pinecone",
     "Burning Bud",
     "Magnifying Glass",
-    "Godly Sprinkler",
     "Mythical Egg",
     "Paradise Egg",
     "Trading Ticket",
@@ -310,14 +245,141 @@ function getRecommendations(stock) {
   );
 
   if (!inStock.length) return "";
-  const lines = inStock.map(name => `✅ ${name}`);
-  return `💡 ${stylizeBoldSerif("Recommended Buys Today")}:\n` + lines.join("\n");
+  const header = `╭───── ${stylizeBoldSerif("RECOMMENDED BUYS")} ─────╮`;
+  const lines = inStock.map(name => `✅ ${name}`).join("\n");
+  const footer = `╰──────────────────────╯`;
+  return `${header}\n${lines}\n${footer}`;
+}
+
+async function getOrExchangeLongLivedToken() {
+  if (CONFIG.LONG_PAGE_ACCESS_TOKEN) return CONFIG.LONG_PAGE_ACCESS_TOKEN;
+  const url = `https://graph.facebook.com/oauth/access_token`;
+  const params = {
+    grant_type: "fb_exchange_token",
+    client_id: CONFIG.APP_ID,
+    client_secret: CONFIG.APP_SECRET,
+    fb_exchange_token: CONFIG.PAGE_ACCESS_TOKEN,
+  };
+  try {
+    const res = await axios.get(url, { params });
+    return res.data.access_token;
+  } catch (err) {
+    console.error("❌ Failed to get long-lived token:", err.message);
+    return null;
+  }
+}
+
+async function postToFacebook(message) {
+  const token = await getOrExchangeLongLivedToken();
+  if (!token) {
+    console.error("❌ No Facebook token available.");
+    return;
+  }
+
+  const hasImage = fs.existsSync(CONFIG.TEMP_IMAGE_PATH);
+  const hasVideo = fs.existsSync(CONFIG.TEMP_VIDEO_PATH);
+
+  if (!hasImage && !hasVideo) {
+    console.log("⚠️ No Temp.png or Temp.mp4 found, skipping post.");
+    return;
+  }
+
+  let res;
+  try {
+    if (hasVideo) {
+      const form = new FormData();
+      form.append("description", message);
+      form.append("access_token", token);
+      form.append("source", fs.createReadStream(CONFIG.TEMP_VIDEO_PATH));
+
+      res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/videos`, form, {
+        headers: form.getHeaders()
+      });
+    } else if (hasImage) {
+      const form = new FormData();
+      form.append("message", message);
+      form.append("access_token", token);
+      form.append("published", "true");
+      form.append("source", fs.createReadStream(CONFIG.TEMP_IMAGE_PATH));
+
+      res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, {
+        headers: form.getHeaders()
+      });
+    }
+    const now = formatPHTime();
+    const url = `https://facebook.com/${res.data.post_id || res.data.id}`;
+    console.log(`✅ Posted at ${now}, ${url}`);
+  } catch (err) {
+    console.error("❌ Failed to post to Facebook:", err.response?.data?.error?.message || err.message);
+  }
 }
 
 async function checkAndPost() {
   try {
     resetCountdownIfSundayMorning();
-    const [stock, weather, predictions] = await Promise.all([getStockData(), fetchWeather(), fetchPredictions()]);
+    const lastHash = loadHash(CONFIG.HASH_FILE);
+
+    const [stock, weather] = await Promise.all([getStockData(), fetchWeather()]);
+    const currentHash = hashData({ stock, weather });
+
+    if (currentHash === lastHash) {
+      console.log("No new stock data. Skipping post.");
+      return;
+    }
+
+    const message = [
+      `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,
+      `📦 ${stylizeBoldSerif("Version: 1.0.2")} //`,
+      `🕓 ${formatPHTime()} PH Time`,
+      stylizeSection("GEAR", "🛠️", stock.gear),
+      stylizeSection("SEEDS", "🌱", stock.seed),
+      stylizeSection("EGGS", "🥚", stock.egg),
+      stylizeSection("EVENT SHOP", "🍯", stock.honey),
+      stylizeSection("COSMETICS", "🎀", stock.cosmetics),
+      stylizeMerchant(stock.travelingmerchant),
+      stylizeWeather(weather),
+      `╭──── ${stylizeBoldSerif("GAG UPDATE CHECK")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`,
+      stylizeTip(getDailyTip()),
+      stylizeRecommendations(stock)
+    ].filter(Boolean).join("\n\n");
+
+    await postToFacebook(message);
+    saveHash(CONFIG.HASH_FILE, currentHash);
+  } catch (err) {
+    console.error("❌ Error during post:", err.message);
+  }
+}
+
+function getDelayToNext5MinutePH() {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const ms = now.getMilliseconds();
+  const seconds = now.getSeconds();
+  const minutes = now.getMinutes();
+  const next = 5 - (minutes % 5);
+  const delayMs = next * 60 * 1000 - seconds * 1000 - ms;
+  return delayMs === 0 ? 5 * 60 * 1000 : delayMs;
+}
+
+function startAutoPosterEvery5Min() {
+  const delay = getDelayToNext5MinutePH();
+  const mm = Math.floor(delay / 60000);
+  const ss = Math.floor((delay % 60000) / 1000);
+  console.log(`⏭️ Next post in ${mm}m ${ss}s`);
+
+  setTimeout(async () => {
+    await checkAndPost();
+    setInterval(checkAndPost, CONFIG.DEFAULT_CHECK_INTERVAL_MS);
+  }, delay);
+}
+
+/* ------------------ EXPRESS ------------------ */
+app.use("/doc", express.static(path.join(__dirname, "public"), { index: "doc.html" }));
+app.get("/", (req, res) => res.redirect("/doc"));
+app.listen(PORT, () => {
+  console.log(`🌐 Server running on port ${PORT}`);
+  startAutoPosterEvery5Min();
+});
+), fetchWeather(), fetchPredictions()]);
     const hash = hashData({ stock, weather, predictions });
     const lastHash = loadHash(CONFIG.HASH_FILE);
     if (hash === lastHash) return;
