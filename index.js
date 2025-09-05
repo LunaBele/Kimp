@@ -1,4 +1,4 @@
-require("dotenv").config();
+Require("dotenv").config();
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
@@ -345,66 +345,6 @@ async function checkAndPost() {
 
     await postToFacebook(message);
     saveHash(CONFIG.HASH_FILE, currentHash);
-  } catch (err) {
-    console.error("❌ Error during post:", err.message);
-  }
-}
-
-function getDelayToNext5MinutePH() {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const ms = now.getMilliseconds();
-  const seconds = now.getSeconds();
-  const minutes = now.getMinutes();
-  const next = 5 - (minutes % 5);
-  const delayMs = next * 60 * 1000 - seconds * 1000 - ms;
-  return delayMs === 0 ? 5 * 60 * 1000 : delayMs;
-}
-
-function startAutoPosterEvery5Min() {
-  const delay = getDelayToNext5MinutePH();
-  const mm = Math.floor(delay / 60000);
-  const ss = Math.floor((delay % 60000) / 1000);
-  console.log(`⏭️ Next post in ${mm}m ${ss}s`);
-
-  setTimeout(async () => {
-    await checkAndPost();
-    setInterval(checkAndPost, CONFIG.DEFAULT_CHECK_INTERVAL_MS);
-  }, delay);
-}
-
-/* ------------------ EXPRESS ------------------ */
-app.use("/doc", express.static(path.join(__dirname, "public"), { index: "doc.html" }));
-app.get("/", (req, res) => res.redirect("/doc"));
-app.listen(PORT, () => {
-  console.log(`🌐 Server running on port ${PORT}`);
-  startAutoPosterEvery5Min();
-});
-), fetchWeather(), fetchPredictions()]);
-    const hash = hashData({ stock, weather, predictions });
-    const lastHash = loadHash(CONFIG.HASH_FILE);
-    if (hash === lastHash) return;
-
-    const message = [  
-      `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,  
-      `📦 ${stylizeBoldSerif("Version: 1.0.1")} //`,  
-      `🕓 ${formatPHTime()} PH Time`,  
-      summarizeSection("GEAR", "🛠️", stock.gear),  
-      summarizeSection("SEEDS", "🌱", stock.seed),  
-      summarizeSection("EGGS", "🥚", stock.egg),  
-      summarizePredictions(predictions),
-      summarizeSection("EVENT SHOP", "🍯", stock.honey),  
-      summarizeSection("COSMETICS", "🎀", stock.cosmetics),  
-      summarizeMerchant(stock.travelingmerchant),  
-      summarizeWeather(weather),  
-      shouldShowUpdateCountdown()  
-        ? `╭──── ${stylizeBoldSerif("GAG NEXT UPDATE AT")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`  
-        : null,  
-      getDailyTip(),  
-      getRecommendations(stock)  
-    ].filter(Boolean).join("\n\n");  
-
-    await postToFacebook(message);  
-    saveHash(CONFIG.HASH_FILE, hash);
   } catch (err) {
     console.error("❌ Error during post:", err.message);
   }
