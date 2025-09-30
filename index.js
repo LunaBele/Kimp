@@ -16,20 +16,20 @@ const CONFIG = {
   PAGE_ID: process.env.PAGE_ID,
   PAGE_ACCESS_TOKEN: process.env.PAGE_ACCESS_TOKEN,
   LONG_PAGE_ACCESS_TOKEN: process.env.LONG_PAGE_ACCESS_TOKEN,
-  WS_URL: process.env.WS_URL,
+  WS_URL: process.env.WS_URL || "wss://gagstock.gleeze.com",
   WEATHER_API: "https://growagardenstock.com/api/stock/weather",
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
   TEMP_VIDEO_PATH: path.join("cache", "Temp.mp4"),
   HASH_FILE: "last_stock_hash.txt",
   DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
-  UPDATE_DAY: 6, // Saturday (0=Sunday, 6=Saturday)
+  UPDATE_DAY: 6, // Saturday
   UPDATE_HOUR: 22, // 10 PM
 };
 
 const TIPS_PATH = "tips.json";
 const TIPS_CACHE_PATH = "shown_tips.json";
 
-/* ------------------ UTIL FUNCTIONS ------------------ */
+/* ------------------ UTIL ------------------ */
 function stylizeBoldSerif(str) {
   const offset = { upper: 0x1d5d4 - 65, lower: 0x1d5ee - 97, digit: 0x1d7ec - 48 };
   return str.split("").map(char => {
@@ -39,50 +39,32 @@ function stylizeBoldSerif(str) {
     return char;
   }).join("");
 }
+const formatPHTime = () =>
+  new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila", hour12: true,
+    year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 
-function formatPHTime() {
-  return new Date().toLocaleString("en-PH", {
-    timeZone: "Asia/Manila",
-    hour12: true,
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function getPHDate() {
-  return new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
-}
-
-function getTodayPH() {
-  return new Date().toLocaleDateString("en-PH", { timeZone: "Asia/Manila" });
-}
+const getPHDate = () => new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
+const getTodayPH = () => new Date().toLocaleDateString("en-PH", { timeZone: "Asia/Manila" });
 
 function getDailyTip() {
   const tips = JSON.parse(fs.readFileSync(TIPS_PATH, "utf8"));
-  let shown = {};
-  if (fs.existsSync(TIPS_CACHE_PATH)) {
-    shown = JSON.parse(fs.readFileSync(TIPS_CACHE_PATH, "utf8"));
-  }
-
+  let shown = fs.existsSync(TIPS_CACHE_PATH) ? JSON.parse(fs.readFileSync(TIPS_CACHE_PATH, "utf8")) : {};
   const today = getTodayPH();
   const used = shown[today] || [];
-
   const available = tips.filter(tip => !used.includes(tip));
+
   if (available.length === 0) {
     shown[today] = [];
     fs.writeFileSync(TIPS_CACHE_PATH, JSON.stringify(shown, null, 2));
     return getDailyTip();
   }
-
   const selected = available[Math.floor(Math.random() * available.length)];
   shown[today] = [...used, selected];
   fs.writeFileSync(TIPS_CACHE_PATH, JSON.stringify(shown, null, 2));
   return `📌 ${selected}`;
 }
 
+/* ------------------ COUNTDOWN ------------------ */
 function formatTimeDifference(ms) {
   const h = String(Math.floor(ms / 3600000)).padStart(2, "0");
   const m = String(Math.floor((ms % 3600000) / 60000)).padStart(2, "0");
@@ -94,54 +76,31 @@ function getUpdateCountdownMessage() {
   const now = new Date(getPHDate());
   const day = now.getDay();
   const hour = now.getHours();
-  const minutes = now.getMinutes();
-
   const targetUpdate = new Date(now);
   targetUpdate.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
 
   if (day === CONFIG.UPDATE_DAY) {
     if (hour >= CONFIG.UPDATE_HOUR) {
-      // Update has passed for the day, show countdown to next week's update
       const nextUpdate = new Date(now);
       nextUpdate.setDate(now.getDate() + 7 - now.getDay() + CONFIG.UPDATE_DAY);
       nextUpdate.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
-      const diff = nextUpdate - now;
-      return `⏳ ${stylizeBoldSerif("Next update check in")} ${formatTimeDifference(diff)}`;
+      return `⏳ ${stylizeBoldSerif("Next update in")} ${formatTimeDifference(nextUpdate - now)}`;
     } else if (hour >= 20) {
-      // Admin alert before the update
-      return stylizeBoldSerif("⚠️ Admins are now playing on the server... Be alert for admin abuse 👀");
+      return stylizeBoldSerif("⚠️ Admins are now playing... Watch out 👀");
     } else {
-      // Countdown to this week's update
-      const diff = targetUpdate - now;
-      return `⏳ ${stylizeBoldSerif("Update in")} ${formatTimeDifference(diff)}`;
+      return `⏳ ${stylizeBoldSerif("Update in")} ${formatTimeDifference(targetUpdate - now)}`;
     }
   }
-
-  // Countdown to next week's update
   const nextUpdate = new Date(now);
   nextUpdate.setDate(now.getDate() + 7 - now.getDay() + CONFIG.UPDATE_DAY);
   nextUpdate.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
-  const diff = nextUpdate - now;
-  return `⏳ ${stylizeBoldSerif("Next update check in")} ${formatTimeDifference(diff)}`;
+  return `⏳ ${stylizeBoldSerif("Next update in")} ${formatTimeDifference(nextUpdate - now)}`;
 }
 
-function shouldShowUpdateCountdown() {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-  const day = now.getDay();
-  const hour = now.getHours();
-  return (day === 5 && hour >= 12) || (day === 6 && hour < 22) || (day > 6 || day < 5);
-}
-
-function resetCountdownIfSundayMorning() {
-  const now = new Date(getPHDate());
-  if (now.getDay() === 0 && now.getHours() === 0 && now.getMinutes() < 5) {
-    fs.writeFileSync(CONFIG.HASH_FILE, "", "utf8");
-  }
-}
-
+/* ------------------ API FETCH ------------------ */
 async function fetchWeather() {
   try {
-    const res = await axios.get(CONFIG.WEATHER_API);
+    const res = await axios.get(CONFIG.WEATHER_API, { timeout: 8000 });
     return res.data;
   } catch (err) {
     console.error("⚠️ Weather API failed:", err.message);
@@ -152,11 +111,9 @@ async function fetchWeather() {
 function hashData(data) {
   return crypto.createHash("sha256").update(JSON.stringify(data)).digest("hex");
 }
-
 function loadHash(file) {
   return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
 }
-
 function saveHash(file, hash) {
   fs.writeFileSync(file, hash, "utf8");
 }
@@ -164,23 +121,26 @@ function saveHash(file, hash) {
 async function getStockData() {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(CONFIG.WS_URL);
+
     ws.on("open", () => ws.send("getAllStock"));
     ws.on("message", msg => {
       try {
         const json = JSON.parse(msg);
-        resolve(json?.data || {});
         ws.close();
+        resolve(json?.data || {});
       } catch (e) {
         reject(e);
       }
     });
     ws.on("error", reject);
+    ws.on("close", () => console.log("🔌 WebSocket closed."));
   });
 }
 
+/* ------------------ STYLERS ------------------ */
 function stylizeSection(title, emoji, group) {
   if (!group?.items?.length) return "";
-  const header = `╭───── ${stylizeBoldSerif(title.toUpperCase())} STOCK ─────╮`;
+  const header = `╭───── ${stylizeBoldSerif(title.toUpperCase())} ─────╮`;
   const lines = group.items.map(x => `${x.emoji || emoji} ${x.name} [${x.quantity}]`).join("\n");
   const footer = `╰──────────────────────╯`;
   return `${header}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n${footer}`;
@@ -197,40 +157,26 @@ function stylizeMerchant(merchant) {
 
 function stylizeWeather(weather) {
   if (!weather?.description) return "";
-  const header = `╭───── ${stylizeBoldSerif("WEATHER")} ─────╮`;
-  const lines = `☁️ Weather: ${weather.description}\n🌽 Bonus Crop: ${weather.cropBonuses || "None"}`;
-  const footer = `╰───────────────────╯`;
-  return `${header}\n${lines}\n${footer}`;
+  return `╭───── ${stylizeBoldSerif("WEATHER")} ─────╮
+☁️ Weather: ${weather.description}
+🌽 Bonus Crop: ${weather.cropBonuses || "None"}
+╰───────────────────╯`;
 }
 
 function stylizeTip(tip) {
   if (!tip) return "";
-  const header = `╭───── ${stylizeBoldSerif("DAILY TIP")} ─────╮`;
-  const footer = `╰──────────────────────╯`;
-  return `${header}\n${tip}\n${footer}`;
+  return `╭───── ${stylizeBoldSerif("DAILY TIP")} ─────╮
+${tip}
+╰──────────────────────╯`;
 }
 
 function stylizeRecommendations(stock) {
-  const wantedItems = [
-    "Master Sprinkler",
-    "Godly Sprinkler",
-    "Medium Treat",
-    "Medium Toy",
-    "Ember Lily",
-    "Giant Pinecone",
-    "Burning Bud",
-    "Magnifying Glass",
-    "Mythical Egg",
-    "Paradise Egg",
-    "Trading Ticket",
-    "Bug Egg",
-    "Bee Egg",
-    "Grand Master Sprinkler",
-    "Level Up Lollipop",
-    "Friendship Pot",
-    "Sprout Egg"
+  const wanted = [
+    "Master Sprinkler","Godly Sprinkler","Medium Treat","Medium Toy",
+    "Ember Lily","Giant Pinecone","Burning Bud","Magnifying Glass",
+    "Mythical Egg","Paradise Egg","Trading Ticket","Bug Egg","Bee Egg",
+    "Grand Master Sprinkler","Level Up Lollipop","Friendship Pot","Sprout Egg"
   ];
-
   const allItems = [
     ...(stock.gear?.items || []),
     ...(stock.seed?.items || []),
@@ -239,97 +185,81 @@ function stylizeRecommendations(stock) {
     ...(stock.cosmetics?.items || []),
     ...(stock.travelingmerchant?.items || [])
   ];
-
-  const inStock = wantedItems.filter(wanted =>
-    allItems.some(item => item.name.toLowerCase() === wanted.toLowerCase())
+  const inStock = wanted.filter(w =>
+    allItems.some(i => i.name.toLowerCase() === w.toLowerCase())
   );
-
   if (!inStock.length) return "";
-  const header = `╭───── ${stylizeBoldSerif("RECOMMENDED BUYS")} ─────╮`;
-  const lines = inStock.map(name => `✅ ${name}`).join("\n");
-  const footer = `╰──────────────────────╯`;
-  return `${header}\n${lines}\n${footer}`;
+  return `╭───── ${stylizeBoldSerif("RECOMMENDED BUYS")} ─────╮
+${inStock.map(n => `✅ ${n}`).join("\n")}
+╰──────────────────────╯`;
 }
 
+/* ------------------ FACEBOOK ------------------ */
 async function getOrExchangeLongLivedToken() {
   if (CONFIG.LONG_PAGE_ACCESS_TOKEN) return CONFIG.LONG_PAGE_ACCESS_TOKEN;
-  const url = `https://graph.facebook.com/oauth/access_token`;
-  const params = {
-    grant_type: "fb_exchange_token",
-    client_id: CONFIG.APP_ID,
-    client_secret: CONFIG.APP_SECRET,
-    fb_exchange_token: CONFIG.PAGE_ACCESS_TOKEN,
-  };
   try {
-    const res = await axios.get(url, { params });
+    const res = await axios.get("https://graph.facebook.com/oauth/access_token", {
+      params: {
+        grant_type: "fb_exchange_token",
+        client_id: CONFIG.APP_ID,
+        client_secret: CONFIG.APP_SECRET,
+        fb_exchange_token: CONFIG.PAGE_ACCESS_TOKEN,
+      }
+    });
     return res.data.access_token;
   } catch (err) {
-    console.error("❌ Failed to get long-lived token:", err.message);
+    console.error("❌ FB token exchange failed:", err.message);
     return null;
   }
 }
 
 async function postToFacebook(message) {
   const token = await getOrExchangeLongLivedToken();
-  if (!token) {
-    console.error("❌ No Facebook token available.");
+  if (!token) return;
+
+  const hasImg = fs.existsSync(CONFIG.TEMP_IMAGE_PATH);
+  const hasVid = fs.existsSync(CONFIG.TEMP_VIDEO_PATH);
+  if (!hasImg && !hasVid) {
+    console.log("⚠️ No Temp.png/mp4 to upload.");
     return;
   }
 
-  const hasImage = fs.existsSync(CONFIG.TEMP_IMAGE_PATH);
-  const hasVideo = fs.existsSync(CONFIG.TEMP_VIDEO_PATH);
-
-  if (!hasImage && !hasVideo) {
-    console.log("⚠️ No Temp.png or Temp.mp4 found, skipping post.");
-    return;
-  }
-
-  let res;
   try {
-    if (hasVideo) {
+    let res;
+    if (hasVid) {
       const form = new FormData();
       form.append("description", message);
       form.append("access_token", token);
       form.append("source", fs.createReadStream(CONFIG.TEMP_VIDEO_PATH));
-
-      res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/videos`, form, {
-        headers: form.getHeaders()
-      });
-    } else if (hasImage) {
+      res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/videos`, form, { headers: form.getHeaders() });
+    } else {
       const form = new FormData();
       form.append("message", message);
       form.append("access_token", token);
       form.append("published", "true");
       form.append("source", fs.createReadStream(CONFIG.TEMP_IMAGE_PATH));
-
-      res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, {
-        headers: form.getHeaders()
-      });
+      res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, { headers: form.getHeaders() });
     }
-    const now = formatPHTime();
-    const url = `https://facebook.com/${res.data.post_id || res.data.id}`;
-    console.log(`✅ Posted at ${now}, ${url}`);
+    console.log(`✅ Posted ${formatPHTime()} → https://facebook.com/${res.data.post_id || res.data.id}`);
   } catch (err) {
-    console.error("❌ Failed to post to Facebook:", err.response?.data?.error?.message || err.message);
+    console.error("❌ FB post failed:", err.response?.data?.error?.message || err.message);
   }
 }
 
+/* ------------------ MAIN ------------------ */
 async function checkAndPost() {
   try {
-    resetCountdownIfSundayMorning();
     const lastHash = loadHash(CONFIG.HASH_FILE);
-
     const [stock, weather] = await Promise.all([getStockData(), fetchWeather()]);
-    const currentHash = hashData({ stock, weather });
+    const newHash = hashData({ stock, weather });
 
-    if (currentHash === lastHash) {
-      console.log("No new stock data. Skipping post.");
+    if (newHash === lastHash) {
+      console.log("No new stock, skipping.");
       return;
     }
 
     const message = [
       `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,
-      `📦 ${stylizeBoldSerif("Version: 1.0.2")} //`,
       `🕓 ${formatPHTime()} PH Time`,
       stylizeSection("GEAR", "🛠️", stock.gear),
       stylizeSection("SEEDS", "🌱", stock.seed),
@@ -344,28 +274,24 @@ async function checkAndPost() {
     ].filter(Boolean).join("\n\n");
 
     await postToFacebook(message);
-    saveHash(CONFIG.HASH_FILE, currentHash);
+    saveHash(CONFIG.HASH_FILE, newHash);
   } catch (err) {
-    console.error("❌ Error during post:", err.message);
+    console.error("❌ Error:", err.message);
   }
 }
 
 function getDelayToNext5MinutePH() {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const sec = now.getSeconds();
   const ms = now.getMilliseconds();
-  const seconds = now.getSeconds();
-  const minutes = now.getMinutes();
-  const next = 5 - (minutes % 5);
-  const delayMs = next * 60 * 1000 - seconds * 1000 - ms;
-  return delayMs === 0 ? 5 * 60 * 1000 : delayMs;
+  const next = 5 - (now.getMinutes() % 5);
+  const delay = next * 60 * 1000 - sec * 1000 - ms;
+  return delay === 0 ? 5 * 60 * 1000 : delay;
 }
 
 function startAutoPosterEvery5Min() {
   const delay = getDelayToNext5MinutePH();
-  const mm = Math.floor(delay / 60000);
-  const ss = Math.floor((delay % 60000) / 1000);
-  console.log(`⏭️ Next post in ${mm}m ${ss}s`);
-
+  console.log(`⏭️ Next check in ${Math.floor(delay/60000)}m ${(delay/1000)%60}s`);
   setTimeout(async () => {
     await checkAndPost();
     setInterval(checkAndPost, CONFIG.DEFAULT_CHECK_INTERVAL_MS);
@@ -376,6 +302,6 @@ function startAutoPosterEvery5Min() {
 app.use("/doc", express.static(path.join(__dirname, "public"), { index: "doc.html" }));
 app.get("/", (req, res) => res.redirect("/doc"));
 app.listen(PORT, () => {
-  console.log(`🌐 Server running on port ${PORT}`);
+  console.log(`🌐 Running on port ${PORT}`);
   startAutoPosterEvery5Min();
 });
