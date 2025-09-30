@@ -4,7 +4,6 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const crypto = require("crypto");
-const WebSocket = require("ws");
 const FormData = require("form-data");
 
 const app = express();
@@ -16,7 +15,7 @@ const CONFIG = {
   PAGE_ID: process.env.PAGE_ID,
   PAGE_ACCESS_TOKEN: process.env.PAGE_ACCESS_TOKEN,
   LONG_PAGE_ACCESS_TOKEN: process.env.LONG_PAGE_ACCESS_TOKEN,
-  WS_URL: process.env.WS_URL || "wss://gagstock.gleeze.com",
+  STOCK_API: "https://growagardenstock.com/api/stock",
   WEATHER_API: "https://growagardenstock.com/api/stock/weather",
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
   TEMP_VIDEO_PATH: path.join("cache", "Temp.mp4"),
@@ -119,40 +118,22 @@ function saveHash(file, hash) {
 }
 
 async function getStockData() {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(CONFIG.WS_URL);
-
-    ws.on("open", () => ws.send("getAllStock"));
-    ws.on("message", msg => {
-      try {
-        const json = JSON.parse(msg);
-        ws.close();
-        resolve(json?.data || {});
-      } catch (e) {
-        reject(e);
-      }
-    });
-    ws.on("error", reject);
-    ws.on("close", () => console.log("🔌 WebSocket closed."));
-  });
+  try {
+    const res = await axios.get(CONFIG.STOCK_API, { timeout: 8000 });
+    return res.data;
+  } catch (err) {
+    console.error("⚠️ Stock API failed:", err.message);
+    return {};
+  }
 }
 
 /* ------------------ STYLERS ------------------ */
-function stylizeSection(title, emoji, group) {
-  if (!group?.items?.length) return "";
+function stylizeArraySection(title, emoji, arr) {
+  if (!arr?.length) return "";
   const header = `╭───── ${stylizeBoldSerif(title.toUpperCase())} ─────╮`;
-  const lines = group.items.map(x => `${x.emoji || emoji} ${x.name} [${x.quantity}]`).join("\n");
+  const lines = arr.map(x => `${emoji} ${x}`).join("\n");
   const footer = `╰──────────────────────╯`;
-  return `${header}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n${footer}`;
-}
-
-function stylizeMerchant(merchant) {
-  if (!merchant) return "";
-  const header = `╭──── ${stylizeBoldSerif("MERCHANT")} ────╮`;
-  if (merchant.status === "leaved") return `${header}\n🛒 Not Available\n╰────────────────╯`;
-  const items = merchant.items.map(x => `🛒 ${x.name} [${x.quantity}]`).join("\n");
-  const footer = `⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
-  return `${header}\n${items}\n${footer}`;
+  return `${header}\n${lines}\n${footer}`;
 }
 
 function stylizeWeather(weather) {
@@ -167,30 +148,6 @@ function stylizeTip(tip) {
   if (!tip) return "";
   return `╭───── ${stylizeBoldSerif("DAILY TIP")} ─────╮
 ${tip}
-╰──────────────────────╯`;
-}
-
-function stylizeRecommendations(stock) {
-  const wanted = [
-    "Master Sprinkler","Godly Sprinkler","Medium Treat","Medium Toy",
-    "Ember Lily","Giant Pinecone","Burning Bud","Magnifying Glass",
-    "Mythical Egg","Paradise Egg","Trading Ticket","Bug Egg","Bee Egg",
-    "Grand Master Sprinkler","Level Up Lollipop","Friendship Pot","Sprout Egg"
-  ];
-  const allItems = [
-    ...(stock.gear?.items || []),
-    ...(stock.seed?.items || []),
-    ...(stock.egg?.items || []),
-    ...(stock.honey?.items || []),
-    ...(stock.cosmetics?.items || []),
-    ...(stock.travelingmerchant?.items || [])
-  ];
-  const inStock = wanted.filter(w =>
-    allItems.some(i => i.name.toLowerCase() === w.toLowerCase())
-  );
-  if (!inStock.length) return "";
-  return `╭───── ${stylizeBoldSerif("RECOMMENDED BUYS")} ─────╮
-${inStock.map(n => `✅ ${n}`).join("\n")}
 ╰──────────────────────╯`;
 }
 
@@ -261,16 +218,12 @@ async function checkAndPost() {
     const message = [
       `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,
       `🕓 ${formatPHTime()} PH Time`,
-      stylizeSection("GEAR", "🛠️", stock.gear),
-      stylizeSection("SEEDS", "🌱", stock.seed),
-      stylizeSection("EGGS", "🥚", stock.egg),
-      stylizeSection("EVENT SHOP", "🍯", stock.honey),
-      stylizeSection("COSMETICS", "🎀", stock.cosmetics),
-      stylizeMerchant(stock.travelingmerchant),
+      stylizeArraySection("GEAR", "🛠️", stock.gear),
+      stylizeArraySection("SEEDS", "🌱", stock.seeds),
+      stylizeArraySection("EGGS", "🥚", stock.egg),
       stylizeWeather(weather),
       `╭──── ${stylizeBoldSerif("GAG UPDATE CHECK")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`,
-      stylizeTip(getDailyTip()),
-      stylizeRecommendations(stock)
+      stylizeTip(getDailyTip())
     ].filter(Boolean).join("\n\n");
 
     await postToFacebook(message);

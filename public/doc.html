@@ -1,384 +1,451 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live NPM Console</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>DevPlay — Single-file HTML + Terminal + JS Runner</title>
+<style>
+  :root{
+    --bg:#0f1724; --panel:#0b1220; --muted:#9aa4b2; --accent:#7c3aed; --green:#22c55e;
+    --glass: rgba(255,255,255,0.03);
+    --radius:12px;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#071029 0%, #071522 100%);color:#e6eef6}
+  .app{
+    display:grid;
+    grid-template-columns: 420px 1fr;
+    grid-template-rows: 1fr 220px;
+    gap:16px;
+    padding:18px;
+    height:100vh;
+    align-items:stretch;
+  }
 
-    body {
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-      color: #e2e8f0;
-      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-      padding: 0;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-    }
+  /* Header (top of left column) */
+  .left {
+    display:flex; flex-direction:column; gap:12px;
+  }
 
-    .header {
-      background: rgba(15, 23, 42, 0.8);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid #334155;
-      padding: 1rem 1.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-shrink: 0;
-    }
+  .card {
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius: var(--radius);
+    padding:12px;
+    box-shadow: 0 6px 18px rgba(2,6,23,0.7);
+    border: 1px solid rgba(255,255,255,0.03);
+  }
 
-    .header h1 {
-      margin: 0;
-      font-size: 1.25rem;
-      font-weight: 600;
-      color: #f1f5f9;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
+  header.app-header{
+    grid-column: 1 / -1;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .brand{
+    display:flex; gap:12px; align-items:center;
+  }
+  .logo{
+    width:44px;height:44px;border-radius:10px;
+    background:linear-gradient(135deg,var(--accent),#4f46e5);
+    display:flex;align-items:center;justify-content:center;font-weight:700;color:white;box-shadow:0 6px 18px rgba(124,58,237,0.18);
+  }
+  .title { font-size:18px; font-weight:600; letter-spacing:0.2px }
+  .sub { font-size:13px; color:var(--muted) }
 
-    .status-indicator {
-      width: 8px;
-      height: 8px;
-      background: #10b981;
-      border-radius: 50%;
-      animation: pulse 2s infinite;
-    }
+  /* Editor */
+  .editor {
+    height: calc(100vh - 220px - 84px);
+    min-height:220px;
+    display:flex;flex-direction:column;
+  }
+  .editor .toolbar{
+    display:flex;align-items:center;gap:8px;margin-bottom:8px;
+  }
+  .btn{
+    background:var(--glass); border:1px solid rgba(255,255,255,0.03);
+    padding:8px 10px;border-radius:8px;color:var(--muted);cursor:pointer;font-weight:600;
+    user-select:none;font-size:13px;
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn.primary{background:linear-gradient(90deg,var(--accent),#4f46e5); color:white; border: none; box-shadow:0 8px 24px rgba(79,70,229,0.18)}
+  .btn.ghost{background:transparent;border:1px dashed rgba(255,255,255,0.04)}
+  .btn.small{padding:6px 8px;font-size:12px;border-radius:6px}
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
+  textarea.code {
+    width:100%; flex:1; resize:none; border-radius:10px;background:#071226;color:#dbeafe;border:1px solid rgba(255,255,255,0.03);
+    padding:14px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;font-size:13px;line-height:1.5;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+  }
 
-    .console-container {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      background: #020617;
-      margin: 1rem;
-      border-radius: 12px;
-      border: 1px solid #334155;
-      overflow: hidden;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    }
+  /* Right top: preview */
+  .preview {
+    display:flex;flex-direction:column; gap:12px; min-height: 300px;
+  }
+  .preview .frame {
+    height: calc(100vh - 260px);
+    border-radius:10px; overflow:hidden;border:1px solid rgba(255,255,255,0.04);
+    background:white;
+  }
 
-    .console-header {
-      background: #1e293b;
-      padding: 0.75rem 1rem;
-      border-bottom: 1px solid #334155;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
+  iframe.runframe { width:100%; height:100%; border:0; background:white; }
 
-    .console-dots {
-      display: flex;
-      gap: 0.25rem;
-    }
+  /* Terminal (bottom) spans full width */
+  .terminal {
+    grid-column: 1 / -1;
+    display:flex; flex-direction:column; gap:8px;
+    margin-top:0;
+  }
+  .term-output {
+    height:200px; overflow:auto; border-radius:10px; padding:12px; background:#04060b; font-family: ui-monospace, Menlo, monospace; font-size:13px;
+    border: 1px solid rgba(255,255,255,0.03);
+  }
+  .term-line { padding:6px 8px; white-space:pre-wrap; color:#dbeafe }
+  .term-line.error { color:#ffb4b4; }
+  .term-line.warn { color:#ffd8a8; }
+  .term-meta { color:var(--muted); font-size:12px; margin-bottom:8px; }
 
-    .console-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-    }
+  .controls { display:flex; gap:8px; align-items:center }
+  .flex { display:flex; gap:8px; align-items:center }
 
-    .console-dot:nth-child(1) { background: #ef4444; }
-    .console-dot:nth-child(2) { background: #f59e0b; }
-    .console-dot:nth-child(3) { background: #10b981; }
+  /* Responsive */
+  @media (max-width:980px){
+    .app { grid-template-columns:1fr; grid-template-rows: auto 1fr auto; padding:12px; }
+    .preview .frame{ height:320px }
+    .editor { height: 260px }
+  }
 
-    .console-title {
-      margin-left: 0.5rem;
-      font-size: 0.875rem;
-      color: #94a3b8;
-    }
-
-    #console {
-      flex: 1;
-      padding: 1rem;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      background: #020617;
-      font-size: 14px;
-      line-height: 1.5;
-      color: #e2e8f0;
-      min-height: 200px;
-    }
-
-    #console::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    #console::-webkit-scrollbar-track {
-      background: #1e293b;
-    }
-
-    #console::-webkit-scrollbar-thumb {
-      background: #475569;
-      border-radius: 3px;
-    }
-
-    .input-container {
-      background: #1e293b;
-      border-top: 1px solid #334155;
-      padding: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .prompt {
-      color: #10b981;
-      font-weight: 600;
-      flex-shrink: 0;
-    }
-
-    #input {
-      flex: 1;
-      border: none;
-      outline: none;
-      padding: 0.75rem 1rem;
-      font-family: inherit;
-      font-size: 14px;
-      background: #0f172a;
-      color: #e2e8f0;
-      border-radius: 8px;
-      border: 1px solid #334155;
-      transition: border-color 0.2s ease;
-    }
-
-    #input:focus {
-      border-color: #10b981;
-      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
-    }
-
-    #input::placeholder {
-      color: #64748b;
-    }
-
-    .command-output {
-      color: #94a3b8;
-    }
-
-    .command-input {
-      color: #10b981;
-      font-weight: 500;
-    }
-
-    .error-output {
-      color: #ef4444;
-    }
-
-    .success-output {
-      color: #10b981;
-    }
-
-    .loading {
-      color: #f59e0b;
-    }
-
-    /* Mobile Responsive */
-    @media (max-width: 768px) {
-      .header {
-        padding: 0.75rem 1rem;
-      }
-
-      .header h1 {
-        font-size: 1.125rem;
-      }
-
-      .console-container {
-        margin: 0.5rem;
-        border-radius: 8px;
-      }
-
-      #console {
-        padding: 0.75rem;
-        font-size: 13px;
-      }
-
-      .input-container {
-        padding: 0.75rem;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0.5rem;
-      }
-
-      .prompt {
-        align-self: flex-start;
-      }
-
-      #input {
-        padding: 0.75rem;
-        font-size: 16px; /* Prevents zoom on iOS */
-      }
-    }
-
-    @media (max-width: 480px) {
-      .console-container {
-        margin: 0.25rem;
-      }
-
-      .header {
-        padding: 0.5rem 0.75rem;
-      }
-
-      .console-header {
-        padding: 0.5rem 0.75rem;
-      }
-
-      .console-title {
-        display: none;
-      }
-    }
-
-    /* Touch improvements */
-    @media (hover: none) and (pointer: coarse) {
-      #input {
-        min-height: 44px; /* iOS touch target minimum */
-      }
-      
-      .input-container {
-        padding-bottom: max(1rem, env(safe-area-inset-bottom));
-      }
-    }
-  </style>
+  /* nice tiny helpers */
+  .file-input { display:none }
+  .muted { color:var(--muted); font-size:13px }
+  .footer-note { font-size:12px; color:var(--muted) }
+</style>
 </head>
 <body>
-  <header class="header">
-    <h1>
-      <div class="status-indicator"></div>
-      NPM Console
-    </h1>
-  </header>
-
-  <div class="console-container">
-    <div class="console-header">
-      <div class="console-dots">
-        <div class="console-dot"></div>
-        <div class="console-dot"></div>
-        <div class="console-dot"></div>
+  <div class="app">
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo">DP</div>
+        <div>
+          <div class="title">DevPlay — Single-file Playground</div>
+          <div class="sub">Editor • Live Preview • Console capture • Load index.js & run</div>
+        </div>
       </div>
-      <div class="console-title">Terminal</div>
+      <div class="controls">
+        <button id="btn-run" class="btn primary">Run (Ctrl/Cmd+Enter)</button>
+        <button id="btn-refresh" class="btn small">Hard Refresh Preview</button>
+        <label class="btn small ghost" title="Load a local index.js file">
+          Load index.js
+          <input id="file-js" class="file-input" type="file" accept=".js" />
+        </label>
+        <button id="btn-clear-console" class="btn small">Clear Console</button>
+        <button id="btn-theme" class="btn small">Toggle Theme</button>
+      </div>
+    </header>
+
+    <!-- Left column: editor -->
+    <div class="left">
+      <div class="card editor">
+        <div class="toolbar">
+          <div class="muted">Editor — write HTML/CSS/JS or paste your index.js then click Run.</div>
+        </div>
+        <textarea id="code" class="code" spellcheck="false">// Example: this code runs inside the preview and logs to DevPlay terminal.
+// You can replace this with your index.js content (or load a file).
+console.log("Hello from inlined script!");
+document.body.style.background = "linear-gradient(90deg,#fef3c7,#fbcfe8)";
+const el = document.createElement('div');
+el.style.fontFamily = 'Inter, sans-serif';
+el.style.padding = '24px';
+el.style.color = '#06203a';
+el.innerHTML = '<h1 style="margin:0">Rendered by DevPlay</h1><p>Replace with your app or load index.js.</p>';
+document.body.innerHTML = '';
+document.body.appendChild(el);
+</textarea>
+      </div>
+
+      <div class="card" style="margin-top:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:700">Quick Helpers</div>
+            <div class="muted">Drag a JS file onto the "Load index.js" button or paste code into the editor.</div>
+          </div>
+          <div style="text-align:right">
+            <div class="footer-note">Saved locally to this page session</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button id="btn-insert-template" class="btn small">Insert Template</button>
+          <button id="btn-download" class="btn small">Download HTML (Built)</button>
+        </div>
+      </div>
     </div>
-    
-    <div id="console"></div>
-    
-    <div class="input-container">
-      <span class="prompt">$</span>
-      <input 
-        id="input" 
-        placeholder="Type a command, e.g. npm install lodash"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="off"
-        spellcheck="false"
-      />
+
+    <!-- Right column: preview -->
+    <div class="preview">
+      <div class="card" style="padding:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-weight:700">Live Preview</div>
+          <div class="muted">Sandboxed iframe—console outputs captured below</div>
+        </div>
+        <div class="frame" style="margin-top:10px">
+          <iframe id="preview-frame" class="runframe" sandbox="allow-scripts allow-forms allow-same-origin"></iframe>
+        </div>
+      </div>
+
+      <div class="card" style="padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:700">Preview Metadata</div>
+          <div class="muted" id="meta-info">No script loaded yet</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal -->
+    <div class="terminal card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:700">DevPlay Terminal</div>
+        <div class="muted">Captures console.log, console.warn, console.error from preview</div>
+      </div>
+      <div class="term-meta" id="term-meta">Session started — ready.</div>
+      <div id="term" class="term-output" aria-live="polite"></div>
     </div>
   </div>
 
-  <script type="module">
-    import { WebContainer } from "https://cdn.jsdelivr.net/npm/@webcontainer/api@1.2.1/dist/webcontainer.min.js";
-    
-    const term = document.getElementById('console');
-    const input = document.getElementById('input');
-    const statusIndicator = document.querySelector('.status-indicator');
+<script>
+(function(){
+  // Elements
+  const codeEl = document.getElementById('code');
+  const btnRun = document.getElementById('btn-run');
+  const btnClearConsole = document.getElementById('btn-clear-console');
+  const btnRefresh = document.getElementById('btn-refresh');
+  const frame = document.getElementById('preview-frame');
+  const term = document.getElementById('term');
+  const termMeta = document.getElementById('term-meta');
+  const fileInput = document.getElementById('file-js');
+  const metaInfo = document.getElementById('meta-info');
+  const btnInsertTemplate = document.getElementById('btn-insert-template');
+  const btnDownload = document.getElementById('btn-download');
+  const btnTheme = document.getElementById('btn-theme');
 
-    function appendToConsole(text, className = '') {
-      const span = document.createElement('span');
-      span.textContent = text;
-      if (className) span.className = className;
-      term.appendChild(span);
-      term.scrollTop = term.scrollHeight;
-    }
+  // Small in-memory storage for loaded file content
+  let loadedJSContent = null;
+  let lastRunBlobUrl = null;
+  let sessionId = Math.random().toString(36).slice(2,9);
 
-    function showLoading(message) {
-      appendToConsole(`⏳ ${message}\n`, 'loading');
-    }
+  // Terminal helpers
+  function appendLine(text, kind='log'){
+    const line = document.createElement('div');
+    line.className = 'term-line ' + (kind==='error' ? 'error' : (kind==='warn' ? 'warn' : ''));
+    const ts = new Date().toLocaleTimeString();
+    line.textContent = `[${ts}] ${text}`;
+    term.appendChild(line);
+    term.scrollTop = term.scrollHeight;
+  }
+  function clearTerm(){ term.innerHTML = ''; appendLine('Console cleared — ready.','log'); }
 
-    function showSuccess(message) {
-      appendToConsole(`✅ ${message}\n`, 'success-output');
-    }
-
-    function showError(message) {
-      appendToConsole(`❌ ${message}\n`, 'error-output');
-    }
-
-    // Initialize
-    showLoading('Initializing WebContainer...');
-    
-    try {
-      // Boot the WebContainer
-      const webcontainer = await WebContainer.boot();
-      
-      // Create basic package.json so npm works
-      await webcontainer.fs.writeFile("package.json", JSON.stringify({
-        name: "webcontainer-demo",
-        version: "1.0.0",
-        main: "index.js",
-        scripts: { 
-          start: "node index.js",
-          dev: "node index.js"
-        },
-        dependencies: {}
-      }, null, 2));
-
-      await webcontainer.fs.writeFile("index.js", `console.log("Hello from WebContainer! 🚀")`);
-
-      // Spawn a shell process
-      const shell = await webcontainer.spawn("jsh");
-      const shellReader = shell.output.getReader();
-
-      async function readShell() {
-        while (true) {
-          const { value, done } = await shellReader.read();
-          if (done) break;
-          const output = new TextDecoder().decode(value);
-          appendToConsole(output, 'command-output');
-        }
+  // Capture messages from iframe via postMessage
+  window.addEventListener('message', e=>{
+    // Only handle messages from our iframe via a small handshake
+    const data = e.data || {};
+    if(data && data.__devplay && data.session === sessionId){
+      if(data.type === 'console'){
+        appendLine(data.payload, data.level || 'log');
+      } else if(data.type === 'meta') {
+        metaInfo.textContent = data.payload;
       }
-
-      readShell();
-
-      // Handle user commands
-      input.addEventListener("keydown", async (e) => {
-        if (e.key === "Enter") {
-          const cmd = input.value.trim();
-          if (!cmd) return;
-
-          // Show command input
-          appendToConsole(`$ ${cmd}\n`, 'command-input');
-          
-          // Send command to shell
-          shell.input.write(new TextEncoder().encode(cmd + "\n"));
-          input.value = "";
-        }
-      });
-
-      // Focus input on mobile tap
-      term.addEventListener('click', () => {
-        input.focus();
-      });
-
-      showSuccess('WebContainer ready! Try these commands:');
-      appendToConsole('• npm install lodash\n', 'command-output');
-      appendToConsole('• npm install express\n', 'command-output');
-      appendToConsole('• node index.js\n', 'command-output');
-      appendToConsole('• ls\n', 'command-output');
-      appendToConsole('\n');
-
-      // Auto-focus input
-      input.focus();
-
-    } catch (error) {
-      showError(`Failed to initialize: ${error.message}`);
-      statusIndicator.style.background = '#ef4444';
     }
-  </script>
+  });
+
+  // Build a full html document for the iframe, injecting user's JS
+  function buildIFrameHtml(jsContent){
+    // Escape closing tags in user's JS safely (we'll insert inside a script tag)
+    // We'll also patch console methods to forward messages to parent via postMessage
+    const harness = `
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DevPlay Preview</title>
+<style>html,body{height:100%;margin:0;font-family:Inter, system-ui, sans-serif;background:#fff;color:#061126}</style>
+</head>
+<body>
+<script>
+(function(){
+  // set up a safe console wrapper to forward messages to parent
+  function send(level, args){
+    try {
+      const payload = Array.prototype.slice.call(args).map(a => {
+        try { return (typeof a === 'object' ? JSON.stringify(a) : String(a)); } catch(_) { return String(a); }
+      }).join(' ');
+      parent.postMessage({ __devplay:true, session: '${sessionId}', type:'console', level: level, payload: payload }, '*');
+    } catch(e){}
+  }
+  ['log','warn','error','info','debug'].forEach(fn=>{
+    const orig = console[fn] || function(){};
+    console[fn] = function(){
+      send(fn, arguments);
+      try { orig.apply(console, arguments); } catch(e){}
+    };
+  });
+  // forward uncaught errors
+  window.addEventListener('error', function(ev){
+    send('error', [ev.message + ' — ' + (ev.filename || '') + ':' + (ev.lineno || '')]);
+  });
+  window.addEventListener('unhandledrejection', function(ev){
+    send('error', ['Unhandled Rejection: ' + (ev.reason && ev.reason.message ? ev.reason.message : JSON.stringify(ev.reason))]);
+  });
+
+  // Inform host about meta status
+  parent.postMessage({ __devplay:true, session: '${sessionId}', type:'meta', payload: 'Preview running (sandboxed).'}, '*');
+})();
+</script>
+
+<script>
+/* user script start */
+${jsContent}
+/* user script end */
+</script>
+</body></html>
+    `;
+    return harness;
+  }
+
+  // Run builder: create blob and set iframe src
+  function runPreview(){
+    try {
+      clearTimeout(window._devplay_kill_timer);
+    } catch(e){}
+    const userJS = loadedJSContent !== null ? loadedJSContent : codeEl.value;
+    // Build HTML
+    const html = buildIFrameHtml(userJS);
+    const blob = new Blob([html], { type: 'text/html' });
+    if(lastRunBlobUrl) URL.revokeObjectURL(lastRunBlobUrl);
+    lastRunBlobUrl = URL.createObjectURL(blob);
+    frame.src = lastRunBlobUrl;
+    termMeta.textContent = 'Running preview...';
+    appendLine('Running preview — injected script size: ' + (userJS.length) + ' bytes', 'log');
+    // Safety: set a timer to notify if nothing logs in 6s
+    window._devplay_kill_timer = setTimeout(()=>{
+      appendLine('No console output detected yet — preview still active.','warn');
+    }, 6000);
+  }
+
+  // Hard refresh: reload iframe (same blob)
+  function hardRefresh(){
+    if(frame.src) {
+      appendLine('Hard refresh preview', 'log');
+      frame.contentWindow.location.reload();
+    }
+  }
+
+  // File input: load index.js
+  fileInput.addEventListener('change', async (ev)=>{
+    const f = ev.target.files[0];
+    if(!f) return;
+    try {
+      const txt = await f.text();
+      loadedJSContent = txt;
+      codeEl.value = txt; // also paste it into editor for convenience
+      appendLine('Loaded file: ' + f.name + ' (' + f.size + ' bytes)', 'log');
+      metaInfo.textContent = 'Loaded: ' + f.name;
+      runPreview();
+    } catch(err){
+      appendLine('Error reading file: ' + err.message, 'error');
+    } finally {
+      fileInput.value = ''; // reset to allow reloading same file
+    }
+  });
+
+  // Drag & drop support on the Load button area (we attach to document)
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length){
+      const f = e.dataTransfer.files[0];
+      if(f.name.endsWith('.js')){
+        const reader = new FileReader();
+        reader.onload = function(){ loadedJSContent = reader.result; codeEl.value = reader.result; appendLine('Dropped & loaded: ' + f.name, 'log'); metaInfo.textContent = 'Loaded: ' + f.name; runPreview(); };
+        reader.onerror = function(){ appendLine('Failed to read dropped file', 'error'); };
+        reader.readAsText(f);
+      } else {
+        appendLine('Only .js files are supported via drop', 'warn');
+      }
+    }
+  });
+
+  // Buttons
+  btnRun.addEventListener('click', ()=>{ loadedJSContent = null; runPreview(); });
+  btnRefresh.addEventListener('click', hardRefresh);
+  btnClearConsole.addEventListener('click', clearTerm);
+
+  // Insert a helpful template
+  btnInsertTemplate.addEventListener('click', ()=>{
+    const tpl = `// Minimal interactive app
+console.log('DevPlay template running');
+document.body.innerHTML = '';
+const root = document.createElement('div');
+root.style.padding = '28px';
+root.innerHTML = '<h1>Mini App — DevPlay</h1><p>Click the button to increase counter (console logs captured below).</p>';
+const btn = document.createElement('button');
+btn.textContent = 'Click me';
+btn.style.padding = '10px 14px'; btn.style.borderRadius = '8px';
+let n = 0;
+btn.onclick = () => { n++; console.log('button clicked', n); btn.textContent = 'Clicked ' + n + ' times'; };
+root.appendChild(btn);
+document.body.appendChild(root);`;
+    codeEl.value = tpl;
+    loadedJSContent = null;
+    appendLine('Inserted template into editor', 'log');
+  });
+
+  // Download built HTML (bundled preview with inline user script)
+  btnDownload.addEventListener('click', ()=>{
+    const js = codeEl.value;
+    const html = buildIFrameHtml(js);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'preview.html';
+    a.click();
+    setTimeout(()=> URL.revokeObjectURL(url), 2000);
+    appendLine('Downloaded preview.html (single-file bundle)', 'log');
+  });
+
+  // Hotkeys
+  document.addEventListener('keydown', (e)=>{
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); loadedJSContent = null; runPreview(); }
+    if((e.ctrlKey || e.metaKey) && e.key === 'k'){ e.preventDefault(); clearTerm(); }
+  });
+
+  // Theme toggle (simple invert)
+  let dark = true;
+  btnTheme.addEventListener('click', ()=>{
+    if(dark){
+      document.documentElement.style.setProperty('--bg','#ffffff');
+      document.documentElement.style.setProperty('--panel','#f8fafc');
+      document.documentElement.style.setProperty('--muted','#556070');
+      document.documentElement.style.setProperty('--accent','#2563eb');
+      document.documentElement.style.setProperty('--glass','rgba(2,6,23,0.03)');
+      dark = false;
+    } else {
+      document.documentElement.style.removeProperty('--bg');
+      document.documentElement.style.removeProperty('--panel');
+      document.documentElement.style.removeProperty('--muted');
+      document.documentElement.style.removeProperty('--accent');
+      document.documentElement.style.removeProperty('--glass');
+      dark = true;
+    }
+  });
+
+  // Initialize
+  clearTerm();
+  appendLine('DevPlay ready — edit code and press Run. Use Load index.js to import a file.', 'log');
+  termMeta.textContent = 'Console active — session ' + sessionId;
+  metaInfo.textContent = 'No external script loaded';
+
+})();
+</script>
 </body>
 </html>
