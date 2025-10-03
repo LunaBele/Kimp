@@ -1,18 +1,12 @@
-/****************************************************
- * Grow-a-Garden Auto Poster v2.1
- * Author: Mart + GPT
- * Purpose: Fetch GAG Stock & Weather → Post to FB
- ****************************************************/
-
 require("dotenv").config();
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const crypto = require("crypto");
+const WebSocket = require("ws");
 const FormData = require("form-data");
 
-/* ------------------ CONFIG ------------------ */
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -22,23 +16,20 @@ const CONFIG = {
   PAGE_ID: process.env.PAGE_ID,
   PAGE_ACCESS_TOKEN: process.env.PAGE_ACCESS_TOKEN,
   LONG_PAGE_ACCESS_TOKEN: process.env.LONG_PAGE_ACCESS_TOKEN,
-
-  STOCK_API: "https://gagstock.gleeze.com/grow-a-garden",
-  WEATHER_API: "https://gagstock.gleeze.com/weather",
-
+  WS_URL: process.env.WS_URL || "wss://gagstock.gleeze.com",
+  WEATHER_API: "https://growagardenstock.com/api/stock/weather",
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
   TEMP_VIDEO_PATH: path.join("cache", "Temp.mp4"),
   HASH_FILE: "last_stock_hash.txt",
-
   DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
-  UPDATE_DAY: 6,  // Saturday
-  UPDATE_HOUR: 22 // 10 PM
+  UPDATE_DAY: 6, // Saturday
+  UPDATE_HOUR: 22, // 10 PM
 };
 
 const TIPS_PATH = "tips.json";
 const TIPS_CACHE_PATH = "shown_tips.json";
 
-/* ------------------ UTILITIES ------------------ */
+/* ------------------ UTIL ------------------ */
 function stylizeBoldSerif(str) {
   const offset = { upper: 0x1d5d4 - 65, lower: 0x1d5ee - 97, digit: 0x1d7ec - 48 };
   return str.split("").map(char => {
@@ -48,19 +39,13 @@ function stylizeBoldSerif(str) {
     return char;
   }).join("");
 }
-
 const formatPHTime = () =>
   new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila", hour12: true,
     year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 
-function getPHNow() {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-}
-function getTodayPH() {
-  return new Date().toLocaleDateString("en-PH", { timeZone: "Asia/Manila" });
-}
+const getPHDate = () => new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
+const getTodayPH = () => new Date().toLocaleDateString("en-PH", { timeZone: "Asia/Manila" });
 
-/* ------------------ DAILY TIP ------------------ */
 function getDailyTip() {
   const tips = JSON.parse(fs.readFileSync(TIPS_PATH, "utf8"));
   let shown = fs.existsSync(TIPS_CACHE_PATH) ? JSON.parse(fs.readFileSync(TIPS_CACHE_PATH, "utf8")) : {};
@@ -88,38 +73,31 @@ function formatTimeDifference(ms) {
 }
 
 function getUpdateCountdownMessage() {
-  const now = getPHNow();
-  const day = now.getDay(); // 0=Sunday, 5=Friday, 6=Saturday
-
-  // Only show countdown on Friday or Saturday
-  if (day !== 5 && day !== CONFIG.UPDATE_DAY) {
-    return "";
-  }
-
+  const now = new Date(getPHDate());
+  const day = now.getDay();
   const hour = now.getHours();
-  const target = new Date(now);
-  target.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
+  const targetUpdate = new Date(now);
+  targetUpdate.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
 
   if (day === CONFIG.UPDATE_DAY) {
     if (hour >= CONFIG.UPDATE_HOUR) {
       const nextUpdate = new Date(now);
-      nextUpdate.setDate(now.getDate() + 7);
+      nextUpdate.setDate(now.getDate() + 7 - now.getDay() + CONFIG.UPDATE_DAY);
       nextUpdate.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
       return `⏳ ${stylizeBoldSerif("Next update in")} ${formatTimeDifference(nextUpdate - now)}`;
     } else if (hour >= 20) {
-      return stylizeBoldSerif("⚠️ Admins are now online... Watch out 👀");
+      return stylizeBoldSerif("⚠️ Admins are now playing... Watch out 👀");
+    } else {
+      return `⏳ ${stylizeBoldSerif("Update in")} ${formatTimeDifference(targetUpdate - now)}`;
     }
-    return `⏳ ${stylizeBoldSerif("Update in")} ${formatTimeDifference(target - now)}`;
   }
-
-  // If it's Friday, show upcoming Saturday countdown
   const nextUpdate = new Date(now);
-  nextUpdate.setDate(now.getDate() + ((7 - day + CONFIG.UPDATE_DAY) % 7));
+  nextUpdate.setDate(now.getDate() + 7 - now.getDay() + CONFIG.UPDATE_DAY);
   nextUpdate.setHours(CONFIG.UPDATE_HOUR, 0, 0, 0);
-  return `⏳ ${stylizeBoldSerif("Update in")} ${formatTimeDifference(nextUpdate - now)}`;
+  return `⏳ ${stylizeBoldSerif("Next update in")} ${formatTimeDifference(nextUpdate - now)}`;
 }
 
-/* ------------------ API HANDLERS ------------------ */
+/* ------------------ API FETCH ------------------ */
 async function fetchWeather() {
   try {
     const res = await axios.get(CONFIG.WEATHER_API, { timeout: 8000 });
@@ -127,15 +105,6 @@ async function fetchWeather() {
   } catch (err) {
     console.error("⚠️ Weather API failed:", err.message);
     return null;
-  }
-}
-async function getStockData() {
-  try {
-    const res = await axios.get(CONFIG.STOCK_API, { timeout: 8000 });
-    return res.data;
-  } catch (err) {
-    console.error("⚠️ Stock API failed:", err.message);
-    return {};
   }
 }
 
@@ -149,25 +118,80 @@ function saveHash(file, hash) {
   fs.writeFileSync(file, hash, "utf8");
 }
 
-/* ------------------ MESSAGE UI ------------------ */
-function stylizeArraySection(title, emoji, arr) {
-  if (!arr?.length) return "";
+async function getStockData() {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(CONFIG.WS_URL);
+
+    ws.on("open", () => ws.send("getAllStock"));
+    ws.on("message", msg => {
+      try {
+        const json = JSON.parse(msg);
+        ws.close();
+        resolve(json?.data || {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    ws.on("error", reject);
+    ws.on("close", () => console.log("🔌 WebSocket closed."));
+  });
+}
+
+/* ------------------ STYLERS ------------------ */
+function stylizeSection(title, emoji, group) {
+  if (!group?.items?.length) return "";
   const header = `╭───── ${stylizeBoldSerif(title.toUpperCase())} ─────╮`;
-  const lines = arr.map(x => `${emoji} ${x}`).join("\n");
+  const lines = group.items.map(x => `${x.emoji || emoji} ${x.name} [${x.quantity}]`).join("\n");
   const footer = `╰──────────────────────╯`;
-  return `${header}\n${lines}\n${footer}`;
+  return `${header}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n${footer}`;
+}
+
+function stylizeMerchant(merchant) {
+  if (!merchant) return "";
+  const header = `╭──── ${stylizeBoldSerif("MERCHANT")} ────╮`;
+  if (merchant.status === "leaved") return `${header}\n🛒 Not Available\n╰────────────────╯`;
+  const items = merchant.items.map(x => `🛒 ${x.name} [${x.quantity}]`).join("\n");
+  const footer = `⌛ Leaves in: ${merchant.countdown}\n╰────────────────╯`;
+  return `${header}\n${items}\n${footer}`;
 }
 
 function stylizeWeather(weather) {
   if (!weather?.description) return "";
   return `╭───── ${stylizeBoldSerif("WEATHER")} ─────╮
-☁️ ${weather.description}
-🌱 Bonus Crop: ${weather.cropBonuses || "None"}
-╰──────────────────────╯`;
+☁️ Weather: ${weather.description}
+🌽 Bonus Crop: ${weather.cropBonuses || "None"}
+╰───────────────────╯`;
 }
 
 function stylizeTip(tip) {
-  return tip ? `╭───── ${stylizeBoldSerif("DAILY TIP")} ─────╮\n${tip}\n╰──────────────────────╯` : "";
+  if (!tip) return "";
+  return `╭───── ${stylizeBoldSerif("DAILY TIP")} ─────╮
+${tip}
+╰──────────────────────╯`;
+}
+
+function stylizeRecommendations(stock) {
+  const wanted = [
+    "Master Sprinkler","Godly Sprinkler","Medium Treat","Medium Toy",
+    "Ember Lily","Giant Pinecone","Burning Bud","Magnifying Glass",
+    "Mythical Egg","Paradise Egg","Trading Ticket","Bug Egg","Bee Egg",
+    "Grand Master Sprinkler","Level Up Lollipop","Friendship Pot","Sprout Egg"
+  ];
+  const allItems = [
+    ...(stock.gear?.items || []),
+    ...(stock.seed?.items || []),
+    ...(stock.egg?.items || []),
+    ...(stock.honey?.items || []),
+    ...(stock.cosmetics?.items || []),
+    ...(stock.travelingmerchant?.items || [])
+  ];
+  const inStock = wanted.filter(w =>
+    allItems.some(i => i.name.toLowerCase() === w.toLowerCase())
+  );
+  if (!inStock.length) return "";
+  return `╭───── ${stylizeBoldSerif("RECOMMENDED BUYS")} ─────╮
+${inStock.map(n => `✅ ${n}`).join("\n")}
+╰──────────────────────╯`;
 }
 
 /* ------------------ FACEBOOK ------------------ */
@@ -195,7 +219,6 @@ async function postToFacebook(message) {
 
   const hasImg = fs.existsSync(CONFIG.TEMP_IMAGE_PATH);
   const hasVid = fs.existsSync(CONFIG.TEMP_VIDEO_PATH);
-
   if (!hasImg && !hasVid) {
     console.log("⚠️ No Temp.png/mp4 to upload.");
     return;
@@ -203,22 +226,21 @@ async function postToFacebook(message) {
 
   try {
     let res;
-    const form = new FormData();
-
     if (hasVid) {
+      const form = new FormData();
       form.append("description", message);
       form.append("access_token", token);
       form.append("source", fs.createReadStream(CONFIG.TEMP_VIDEO_PATH));
       res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/videos`, form, { headers: form.getHeaders() });
     } else {
+      const form = new FormData();
       form.append("message", message);
       form.append("access_token", token);
       form.append("published", "true");
       form.append("source", fs.createReadStream(CONFIG.TEMP_IMAGE_PATH));
       res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/photos`, form, { headers: form.getHeaders() });
     }
-
-    console.log(`✅ Posted at ${formatPHTime()} → https://facebook.com/${res.data.post_id || res.data.id}`);
+    console.log(`✅ Posted ${formatPHTime()} → https://facebook.com/${res.data.post_id || res.data.id}`);
   } catch (err) {
     console.error("❌ FB post failed:", err.response?.data?.error?.message || err.message);
   }
@@ -232,21 +254,23 @@ async function checkAndPost() {
     const newHash = hashData({ stock, weather });
 
     if (newHash === lastHash) {
-      console.log("⏸️ No new stock. Waiting...");
+      console.log("No new stock, skipping.");
       return;
     }
-
-    const countdown = getUpdateCountdownMessage();
 
     const message = [
       `🌿✨ ${stylizeBoldSerif("Grow-a-Garden Report")} ✨🌿`,
       `🕓 ${formatPHTime()} PH Time`,
-      stylizeArraySection("GEAR", "🛠️", stock.gear),
-      stylizeArraySection("SEEDS", "🌱", stock.seeds),
-      stylizeArraySection("EGGS", "🥚", stock.egg),
+      stylizeSection("GEAR", "🛠️", stock.gear),
+      stylizeSection("SEEDS", "🌱", stock.seed),
+      stylizeSection("EGGS", "🥚", stock.egg),
+      stylizeSection("EVENT SHOP", "🍯", stock.honey),
+      stylizeSection("COSMETICS", "🎀", stock.cosmetics),
+      stylizeMerchant(stock.travelingmerchant),
       stylizeWeather(weather),
-      countdown ? `╭──── ${stylizeBoldSerif("GAG UPDATE CHECK")} ────╮\n${countdown}\n╰────────────────╯` : "",
-      stylizeTip(getDailyTip())
+      `╭──── ${stylizeBoldSerif("GAG UPDATE CHECK")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`,
+      stylizeTip(getDailyTip()),
+      stylizeRecommendations(stock)
     ].filter(Boolean).join("\n\n");
 
     await postToFacebook(message);
@@ -256,9 +280,8 @@ async function checkAndPost() {
   }
 }
 
-/* ------------------ AUTO POST LOOP ------------------ */
 function getDelayToNext5MinutePH() {
-  const now = getPHNow();
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
   const sec = now.getSeconds();
   const ms = now.getMilliseconds();
   const next = 5 - (now.getMinutes() % 5);
@@ -266,7 +289,7 @@ function getDelayToNext5MinutePH() {
   return delay === 0 ? 5 * 60 * 1000 : delay;
 }
 
-function startAutoPoster() {
+function startAutoPosterEvery5Min() {
   const delay = getDelayToNext5MinutePH();
   console.log(`⏭️ Next check in ${Math.floor(delay/60000)}m ${(delay/1000)%60}s`);
   setTimeout(async () => {
@@ -275,11 +298,10 @@ function startAutoPoster() {
   }, delay);
 }
 
-/* ------------------ EXPRESS SERVER ------------------ */
+/* ------------------ EXPRESS ------------------ */
 app.use("/doc", express.static(path.join(__dirname, "public"), { index: "doc.html" }));
 app.get("/", (req, res) => res.redirect("/doc"));
-
 app.listen(PORT, () => {
-  console.log(`🌐 Server running on port ${PORT}`);
-  startAutoPoster();
+  console.log(`🌐 Running on port ${PORT}`);
+  startAutoPosterEvery5Min();
 });
