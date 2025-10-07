@@ -18,6 +18,7 @@ const CONFIG = {
   LONG_PAGE_ACCESS_TOKEN: process.env.LONG_PAGE_ACCESS_TOKEN,
   WS_URL: process.env.WS_URL || "wss://gagstock.gleeze.com",
   WEATHER_API: "https://growagardenstock.com/api/stock/weather",
+  PVB_API: "https://plantsvsbrainrotsstocktracker.com/api/stock",
   TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
   TEMP_VIDEO_PATH: path.join("cache", "Temp.mp4"),
   HASH_FILE: "last_stock_hash.txt",
@@ -40,15 +41,24 @@ function stylizeBoldSerif(str) {
   }).join("");
 }
 const formatPHTime = () =>
-  new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila", hour12: true,
-    year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  new Date().toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    hour12: true,
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 
 const getPHDate = () => new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
 const getTodayPH = () => new Date().toLocaleDateString("en-PH", { timeZone: "Asia/Manila" });
 
 function getDailyTip() {
   const tips = JSON.parse(fs.readFileSync(TIPS_PATH, "utf8"));
-  let shown = fs.existsSync(TIPS_CACHE_PATH) ? JSON.parse(fs.readFileSync(TIPS_CACHE_PATH, "utf8")) : {};
+  let shown = fs.existsSync(TIPS_CACHE_PATH)
+    ? JSON.parse(fs.readFileSync(TIPS_CACHE_PATH, "utf8"))
+    : {};
   const today = getTodayPH();
   const used = shown[today] || [];
   const available = tips.filter(tip => !used.includes(tip));
@@ -108,6 +118,19 @@ async function fetchWeather() {
   }
 }
 
+async function fetchPvBStock() {
+  try {
+    const res = await axios.get(CONFIG.PVB_API, { timeout: 8000 });
+    const items = res.data.items || [];
+    const seed = items.filter(i => i.category === "seed");
+    const gear = items.filter(i => i.category === "gear");
+    return { seed, gear, updatedAt: res.data.updatedAt };
+  } catch (err) {
+    console.error("⚠️ PvB Stock API failed:", err.message);
+    return { seed: [], gear: [] };
+  }
+}
+
 function hashData(data) {
   return crypto.createHash("sha256").update(JSON.stringify(data)).digest("hex");
 }
@@ -121,7 +144,6 @@ function saveHash(file, hash) {
 async function getStockData() {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(CONFIG.WS_URL);
-
     ws.on("open", () => ws.send("getAllStock"));
     ws.on("message", msg => {
       try {
@@ -146,6 +168,15 @@ function stylizeSection(title, emoji, group) {
   return `${header}\n${lines}${group.countdown ? `\n⏳ ${group.countdown}` : ""}\n${footer}`;
 }
 
+function stylizePvBCategory(title, emoji, list) {
+  if (!list.length) return "";
+  const header = `╭───── ${stylizeBoldSerif("PLANTS VS BRAINROTS")} ─────╮`;
+  const sub = `【${title.toUpperCase()}】`;
+  const lines = list.map(i => `${emoji} ${i.name} [${i.currentStock}]`).join("\n");
+  const footer = `╰────────────────────────────╯`;
+  return `${header}\n${sub}\n${lines}\n${footer}`;
+}
+
 function stylizeMerchant(merchant) {
   if (!merchant) return "";
   const header = `╭──── ${stylizeBoldSerif("MERCHANT")} ────╮`;
@@ -167,30 +198,6 @@ function stylizeTip(tip) {
   if (!tip) return "";
   return `╭───── ${stylizeBoldSerif("DAILY TIP")} ─────╮
 ${tip}
-╰──────────────────────╯`;
-}
-
-function stylizeRecommendations(stock) {
-  const wanted = [
-    "Master Sprinkler","Godly Sprinkler","Medium Treat","Medium Toy",
-    "Ember Lily","Giant Pinecone","Burning Bud","Magnifying Glass",
-    "Mythical Egg","Paradise Egg","Trading Ticket","Bug Egg","Bee Egg",
-    "Grand Master Sprinkler","Level Up Lollipop","Friendship Pot","Sprout Egg"
-  ];
-  const allItems = [
-    ...(stock.gear?.items || []),
-    ...(stock.seed?.items || []),
-    ...(stock.egg?.items || []),
-    ...(stock.honey?.items || []),
-    ...(stock.cosmetics?.items || []),
-    ...(stock.travelingmerchant?.items || [])
-  ];
-  const inStock = wanted.filter(w =>
-    allItems.some(i => i.name.toLowerCase() === w.toLowerCase())
-  );
-  if (!inStock.length) return "";
-  return `╭───── ${stylizeBoldSerif("RECOMMENDED BUYS")} ─────╮
-${inStock.map(n => `✅ ${n}`).join("\n")}
 ╰──────────────────────╯`;
 }
 
@@ -250,8 +257,12 @@ async function postToFacebook(message) {
 async function checkAndPost() {
   try {
     const lastHash = loadHash(CONFIG.HASH_FILE);
-    const [stock, weather] = await Promise.all([getStockData(), fetchWeather()]);
-    const newHash = hashData({ stock, weather });
+    const [stock, weather, pvb] = await Promise.all([
+      getStockData(),
+      fetchWeather(),
+      fetchPvBStock()
+    ]);
+    const newHash = hashData({ stock, weather, pvb });
 
     if (newHash === lastHash) {
       console.log("No new stock, skipping.");
@@ -268,9 +279,10 @@ async function checkAndPost() {
       stylizeSection("COSMETICS", "🎀", stock.cosmetics),
       stylizeMerchant(stock.travelingmerchant),
       stylizeWeather(weather),
-      `╭──── ${stylizeBoldSerif("GAG UPDATE CHECK")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`,
       stylizeTip(getDailyTip()),
-      stylizeRecommendations(stock)
+      `╭──── ${stylizeBoldSerif("GAG UPDATE CHECK")} ────╮\n${getUpdateCountdownMessage()}\n╰────────────────╯`,
+      stylizePvBCategory("Seed", "🌱", pvb.seed),
+      stylizePvBCategory("Gear", "⚙️", pvb.gear)
     ].filter(Boolean).join("\n\n");
 
     await postToFacebook(message);
@@ -291,7 +303,7 @@ function getDelayToNext5MinutePH() {
 
 function startAutoPosterEvery5Min() {
   const delay = getDelayToNext5MinutePH();
-  console.log(`⏭️ Next check in ${Math.floor(delay/60000)}m ${(delay/1000)%60}s`);
+  console.log(`⏭️ Next check in ${Math.floor(delay / 60000)}m ${(delay / 1000) % 60}s`);
   setTimeout(async () => {
     await checkAndPost();
     setInterval(checkAndPost, CONFIG.DEFAULT_CHECK_INTERVAL_MS);
