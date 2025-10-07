@@ -19,14 +19,12 @@ const CONFIG = {
   WS_URL: process.env.WS_URL || "wss://gagstock.gleeze.com",
   WEATHER_API: "https://growagardenstock.com/api/stock/weather",
   PVB_API: "https://plantsvsbrainrotsstocktracker.com/api/stock",
-  TEMP_IMAGE_PATH: path.join("cache", "Temp.png"),
-  TEMP_VIDEO_PATH: path.join("cache", "Temp.mp4"),
   HASH_FILE_GAG: "last_stock_hash_gag.txt",
   HASH_FILE_PVB: "last_stock_hash_pvb.txt",
-  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
-  UPDATE_DAY_GAG: 6, // Saturday
-  UPDATE_HOUR_GAG: 22, // 10 PM
-  UPDATE_HOUR_PVB: 21 // 9 PM
+  DEFAULT_CHECK_INTERVAL_MS: 5 * 60 * 1000,
+  UPDATE_DAY_GAG: 6,
+  UPDATE_HOUR_GAG: 22,
+  UPDATE_HOUR_PVB: 21
 };
 
 const TIPS_PATH = "tips.json";
@@ -212,23 +210,33 @@ async function getOrExchangeLongLivedToken() {
   }
 }
 
-async function postToFacebook(message) {
+function findMediaFile(baseName) {
+  const exts = [".png", ".jpg", ".jpeg", ".mp4"];
+  for (const ext of exts) {
+    const file = path.join("cache", baseName + ext);
+    if (fs.existsSync(file)) return file;
+  }
+  return null;
+}
+
+async function postMediaToFacebook(message, mediaFile) {
   const token = await getOrExchangeLongLivedToken();
   if (!token) return;
   try {
+    const isVideo = mediaFile.endsWith(".mp4");
     const form = new FormData();
-    form.append("message", message);
+    form.append(isVideo ? "description" : "message", message);
     form.append("access_token", token);
-    const res = await axios.post(`https://graph.facebook.com/${CONFIG.PAGE_ID}/feed`, form, {
-      headers: form.getHeaders()
-    });
-    console.log(`✅ Posted ${formatPHTime()} → https://facebook.com/${res.data.id}`);
+    form.append("source", fs.createReadStream(mediaFile));
+    const endpoint = `https://graph.facebook.com/${CONFIG.PAGE_ID}/${isVideo ? "videos" : "photos"}`;
+    const res = await axios.post(endpoint, form, { headers: form.getHeaders() });
+    console.log(`✅ Posted ${formatPHTime()} → https://facebook.com/${res.data.post_id || res.data.id}`);
   } catch (err) {
     console.error("❌ FB post failed:", err.response?.data?.error?.message || err.message);
   }
 }
 
-/* ------------------ POSTING LOGIC ------------------ */
+/* ------------------ POSTING ------------------ */
 async function postGrowAGarden() {
   const lastHash = loadHash(CONFIG.HASH_FILE_GAG);
   const [stock, weather] = await Promise.all([getStockData(), fetchWeather()]);
@@ -248,7 +256,9 @@ async function postGrowAGarden() {
     stylizeTip(getDailyTip())
   ].filter(Boolean).join("\n\n");
 
-  await postToFacebook(message);
+  const media = findMediaFile("gag");
+  if (!media) console.log("⚠️ No gag media found (png/jpg/mp4)");
+  await postMediaToFacebook(message, media);
   saveHash(CONFIG.HASH_FILE_GAG, newHash);
 }
 
@@ -267,7 +277,9 @@ async function postPlantsVsBrainrots() {
     `📅 ${getUpdateCountdownMessage_PVB()}`
   ].filter(Boolean).join("\n\n");
 
-  await postToFacebook(message);
+  const media = findMediaFile("pvzb");
+  if (!media) console.log("⚠️ No pvzb media found (png/jpg/mp4)");
+  await postMediaToFacebook(message, media);
   saveHash(CONFIG.HASH_FILE_PVB, newHash);
 }
 
@@ -275,7 +287,7 @@ async function postPlantsVsBrainrots() {
 async function checkAndPostSeparated() {
   try {
     await postGrowAGarden();
-    setTimeout(postPlantsVsBrainrots, 30000); // delay PvB by 30s
+    setTimeout(postPlantsVsBrainrots, 30000);
   } catch (err) {
     console.error("❌ Error:", err.message);
   }
